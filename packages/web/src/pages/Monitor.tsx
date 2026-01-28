@@ -70,6 +70,7 @@ export default function Monitor() {
   // Import state
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Clock
@@ -162,6 +163,49 @@ export default function Monitor() {
       fileInputRef.current.value = ''
     }
   }, [handleImportConfig])
+
+  // Export config handler
+  const handleExportConfig = useCallback(() => {
+    const config: StreamVUConfig = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      streams: streams.map((s) => ({
+        id: s.id,
+        name: s.name,
+        url: s.url,
+        mountPoint: s.mountPoint,
+        displayOrder: s.displayOrder,
+        isVisible: s.isVisible,
+      })),
+    }
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `streamvu-config-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [streams])
+
+  // Clear config handler
+  const handleClearConfig = useCallback(() => {
+    // Stop monitoring first
+    if (isMonitoring) {
+      stopMonitoring()
+    }
+    // Stop any recordings
+    recordingStreams.forEach((streamId) => {
+      stopRecording(streamId)
+    })
+    // Clear streams
+    setStreams([])
+    // Clear saved order
+    localStorage.removeItem(STREAM_ORDER_KEY)
+    setStreamOrder([])
+    setShowClearConfirm(false)
+  }, [isMonitoring, stopMonitoring, recordingStreams, stopRecording, setStreams])
 
   // DnD sensors
   const sensors = useSensors(
@@ -510,6 +554,39 @@ export default function Monitor() {
               </span>
             </div>
           )}
+
+          {/* Config actions */}
+          <div className="ml-4 flex items-center gap-2 border-l border-gray-700 pl-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleFileInput}
+              className="hidden"
+              id="config-import-bar"
+            />
+            <label
+              htmlFor="config-import-bar"
+              className="cursor-pointer rounded px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              title="Import config"
+            >
+              Import
+            </label>
+            <button
+              onClick={handleExportConfig}
+              className="rounded px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              title="Export config"
+            >
+              Export
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="rounded px-2 py-1 text-xs text-red-400 transition-colors hover:bg-red-900/50 hover:text-red-300"
+              title="Clear all streams"
+            >
+              Clear
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -630,6 +707,32 @@ export default function Monitor() {
           </div>
         </div>
       </footer>
+
+      {/* Clear confirmation modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="mx-4 max-w-sm rounded-lg border border-gray-700 bg-gray-900 p-6 shadow-xl">
+            <h3 className="mb-2 text-lg font-bold text-white">Clear All Streams?</h3>
+            <p className="mb-6 text-sm text-gray-400">
+              This will remove all {streams.length} streams from your configuration. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="rounded px-4 py-2 text-sm text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearConfig}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
