@@ -196,9 +196,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
     return (
       <div className="flex-1">
         <div className="mb-1 text-center font-mono text-[9px] font-medium text-gray-400">{channel}</div>
-        <div className={`relative overflow-hidden rounded-lg border border-gray-700/50 bg-black/60 ${
-          tileSize === 'S' ? 'h-32' : tileSize === 'L' ? 'h-80' : 'h-52'
-        }`}>
+        <div className="relative flex-1 overflow-hidden rounded-lg border border-gray-700/50 bg-black/60">
           <div className="absolute inset-0 flex flex-col-reverse p-1">
             {Array.from({ length: segments }).map((_, i) => {
               const isActive = i < activeSegment
@@ -246,7 +244,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative overflow-hidden rounded-xl border bg-gray-900/80 shadow-lg transition-all ${
+      className={`relative flex flex-col overflow-hidden rounded-xl border bg-gray-900/80 shadow-lg transition-all ${
         !isOnline
           ? 'border-red-900/60'
           : isSilenceAlarm
@@ -271,7 +269,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
       )}
 
       {/* Main content */}
-      <div className="p-3">
+      <div className="flex flex-1 flex-col p-2">
         {/* Stream name */}
         <h2 className="truncate text-base font-semibold text-white">{name}</h2>
 
@@ -293,7 +291,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
         </div>
 
         {/* VU Meters */}
-        <div className="mb-2 flex gap-1.5">
+        <div className="mb-2 flex flex-1 gap-1.5">
           {renderMeter(isMonitoring ? leftLevel : 0, isMonitoring ? peakLeftRef.current : 0, 'L')}
           {renderMeter(isMonitoring ? rightLevel : 0, isMonitoring ? peakRightRef.current : 0, 'R')}
 
@@ -394,34 +392,11 @@ const MCRStreamTile = memo(function MCRStreamTile({
 
         {/* Control buttons */}
         {isMonitoring && isOnline && (
-          <div className="mt-2 flex items-center justify-between border-t border-gray-800/50 pt-2">
-            {/* Recording controls */}
-            <div className="flex gap-1">
-              {!isRecording ? (
-                <button
-                  onClick={onStartRecording}
-                  className="flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs font-medium text-gray-400 transition-colors hover:bg-red-900 hover:text-red-400"
-                  title="Start recording"
-                >
-                  <span className="h-2 w-2 rounded-full bg-current" />
-                  REC
-                </button>
-              ) : (
-                <button
-                  onClick={onStopRecording}
-                  className="flex animate-pulse items-center gap-1 rounded bg-red-900 px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-800"
-                  title="Stop recording"
-                >
-                  <span className="h-2 w-2 bg-current" />
-                  STOP
-                </button>
-              )}
-            </div>
-
-            {/* Volume slider */}
+          <div className="mt-2 space-y-2 border-t border-gray-800/50 pt-2">
+            {/* Volume slider - full width */}
             {onVolumeChange && (
-              <div className="flex flex-1 items-center gap-2 px-2">
-                <svg className="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <div className="flex items-center gap-2">
+                <svg className="h-3 w-3 shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                 </svg>
                 <input
@@ -431,26 +406,50 @@ const MCRStreamTile = memo(function MCRStreamTile({
                   step="0.05"
                   value={volume}
                   onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                  className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-gray-700 accent-[#1E6BFF]"
+                  className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-gray-700 accent-[#1E6BFF]"
                   title={`Volume: ${Math.round(volume * 100)}%`}
                 />
-                <span className="w-8 text-right font-mono text-[10px] text-gray-500">
+                <span className="w-8 shrink-0 text-right font-mono text-[10px] text-gray-500">
                   {Math.round(volume * 100)}%
                 </span>
               </div>
             )}
 
-            {/* Mute button */}
-            <button
-              onClick={onToggleMute}
-              className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                isMuted
-                  ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-500'
-              }`}
-            >
-              {isMuted ? 'MUTED' : 'AUDIO'}
-            </button>
+            {/* Buttons row */}
+            <div className="flex items-center justify-between gap-2">
+              {/* Recording controls */}
+              {!isRecording ? (
+                <button
+                  onClick={onStartRecording}
+                  className="flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs font-medium text-gray-400 transition-colors hover:bg-red-900 hover:text-red-400"
+                  title="Start recording"
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  <span className="hidden sm:inline">REC</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onStopRecording}
+                  className="flex animate-pulse items-center gap-1 rounded bg-red-900 px-2 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-800"
+                  title="Stop recording"
+                >
+                  <span className="h-2 w-2 bg-current" />
+                  <span className="hidden sm:inline">STOP</span>
+                </button>
+              )}
+
+              {/* Mute button */}
+              <button
+                onClick={onToggleMute}
+                className={`flex-1 rounded py-1.5 text-xs font-medium transition-colors ${
+                  isMuted
+                    ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                }`}
+              >
+                {isMuted ? 'MUTED' : 'AUDIO ON'}
+              </button>
+            </div>
           </div>
         )}
       </div>

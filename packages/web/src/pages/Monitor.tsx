@@ -22,10 +22,10 @@ import {
 } from '@dnd-kit/sortable'
 
 type GridColumns = 'auto' | 1 | 2 | 3 | 4 | 5 | 6
-type TileSize = 'S' | 'M' | 'L'
+type GridRows = 1 | 2 | 3
 
 const GRID_COLUMNS_KEY = 'streamvu-grid-columns'
-const TILE_SIZE_KEY = 'streamvu-tile-size'
+const GRID_ROWS_KEY = 'streamvu-grid-rows'
 const STREAM_ORDER_KEY = 'streamvu-stream-order'
 const HIPPYNET_PROMO_KEY = 'streamvu-hippynet-promo'
 
@@ -49,15 +49,16 @@ export default function Monitor() {
     if (num >= 1 && num <= 6) return num as GridColumns
     return 'auto'
   })
-  const [tileSize, setTileSize] = useState<TileSize>(() => {
-    const saved = localStorage.getItem(TILE_SIZE_KEY)
-    if (saved === 'S' || saved === 'M' || saved === 'L') return saved
-    return 'M'
+  const [gridRows, setGridRows] = useState<GridRows>(() => {
+    const saved = localStorage.getItem(GRID_ROWS_KEY)
+    const num = parseInt(saved || '', 10)
+    if (num >= 1 && num <= 3) return num as GridRows
+    return 2
   })
 
-  const handleTileSizeChange = (size: TileSize) => {
-    setTileSize(size)
-    localStorage.setItem(TILE_SIZE_KEY, size)
+  const handleGridRowsChange = (rows: GridRows) => {
+    setGridRows(rows)
+    localStorage.setItem(GRID_ROWS_KEY, String(rows))
   }
 
   // Recording state
@@ -469,15 +470,25 @@ export default function Monitor() {
     return [...onlineStreams, ...offlineStreams]
   }, [onlineStreams, offlineStreams])
 
-  // Get min-height for tiles based on size
-  const tileMinHeight = useMemo(() => {
-    switch (tileSize) {
-      case 'S': return 'min-h-[280px]'
-      case 'M': return 'min-h-[380px]'
-      case 'L': return 'min-h-[500px]'
-      default: return 'min-h-[380px]'
+  // Map grid rows to tile size for the component
+  const tileSize = useMemo(() => {
+    switch (gridRows) {
+      case 1: return 'L' as const
+      case 2: return 'M' as const
+      case 3: return 'S' as const
+      default: return 'M' as const
     }
-  }, [tileSize])
+  }, [gridRows])
+
+  // Calculate row height style based on viewport
+  // Account for header (~64px), control bar (~48px), footer areas (~200px estimated)
+  const gridRowStyle = useMemo(() => {
+    const chromeHeight = zenMode ? 0 : 280 // Approximate chrome height
+    return {
+      gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+      height: zenMode ? '100vh' : `calc(100vh - ${chromeHeight}px)`,
+    }
+  }, [gridRows, zenMode])
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
@@ -663,22 +674,22 @@ export default function Monitor() {
             </div>
           </div>
 
-          {/* Tile size selector */}
+          {/* Row selector */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">Size</span>
+            <span className="text-[10px] uppercase tracking-wider text-gray-500">Rows</span>
             <div className="flex items-center rounded border border-gray-700 bg-gray-900">
-              {(['S', 'M', 'L'] as TileSize[]).map((size) => (
+              {([1, 2, 3] as GridRows[]).map((rows) => (
                 <button
-                  key={size}
-                  onClick={() => handleTileSizeChange(size)}
+                  key={rows}
+                  onClick={() => handleGridRowsChange(rows)}
                   className={`px-2 py-1 font-mono text-xs transition-colors ${
-                    tileSize === size
+                    gridRows === rows
                       ? 'bg-primary-600 text-white'
                       : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                   }`}
-                  title={size === 'S' ? 'Small tiles' : size === 'M' ? 'Medium tiles' : 'Large tiles'}
+                  title={`${rows} row${rows > 1 ? 's' : ''} visible`}
                 >
-                  {size}
+                  {rows}
                 </button>
               ))}
             </div>
@@ -752,10 +763,13 @@ export default function Monitor() {
       )}
 
       {/* Stream tiles */}
-      <main className="flex-1 overflow-auto p-4">
+      <main className="flex-1 overflow-hidden p-2">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={allOrderedStreams.map((s) => s.id)} strategy={rectSortingStrategy}>
-            <div className={`grid ${gridClass} auto-rows-fr gap-4`}>
+            <div
+              className={`grid ${gridClass} gap-2 overflow-auto`}
+              style={gridRowStyle}
+            >
               {allOrderedStreams.map((stream) => {
                 // Treat streams without health data as potentially online (unknown status)
                 const isOnline = stream.latestHealth === null || stream.latestHealth?.isOnline === true
