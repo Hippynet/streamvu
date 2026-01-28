@@ -221,12 +221,14 @@ export default function Monitor() {
   }, [streams, streamOrder])
 
   // Filter streams
+  // Streams are "monitorable" if they have no health data (unknown) or are confirmed online
+  // Only mark as offline if health check explicitly says so
   const onlineStreams = useMemo(
-    () => orderedStreams.filter((s) => s.latestHealth?.isOnline),
+    () => orderedStreams.filter((s) => s.latestHealth === null || s.latestHealth?.isOnline),
     [orderedStreams]
   )
   const offlineStreams = useMemo(
-    () => orderedStreams.filter((s) => !s.latestHealth?.isOnline),
+    () => orderedStreams.filter((s) => s.latestHealth !== null && !s.latestHealth?.isOnline),
     [orderedStreams]
   )
 
