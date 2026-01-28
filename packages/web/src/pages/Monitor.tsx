@@ -86,6 +86,12 @@ export default function Monitor() {
     })
   }, [])
 
+  // Zen mode (hides chrome, shows only VU meters)
+  const [zenMode, setZenMode] = useState(false)
+
+  // Help panel state
+  const [showHelp, setShowHelp] = useState(false)
+
   // Clock
   const [time, setTime] = useState(new Date())
   useEffect(() => {
@@ -531,8 +537,22 @@ export default function Monitor() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col bg-gray-950">
+    <div className={`flex flex-col bg-gray-950 ${zenMode ? 'min-h-screen' : 'min-h-[calc(100vh-4rem)]'}`}>
+      {/* Zen mode exit button */}
+      {zenMode && (
+        <button
+          onClick={() => setZenMode(false)}
+          className="fixed right-4 top-4 z-50 rounded-lg border border-gray-700 bg-gray-900/90 p-2 text-gray-400 shadow-lg backdrop-blur-sm transition-all hover:border-gray-600 hover:bg-gray-800 hover:text-white"
+          title="Exit zen mode (Esc)"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+          </svg>
+        </button>
+      )}
+
       {/* Control bar */}
+      {!zenMode && (
       <div className="flex items-center justify-between border-b border-gray-800 bg-black px-4 py-2">
         <div className="flex items-center gap-6">
           {/* Status indicators */}
@@ -590,6 +610,13 @@ export default function Monitor() {
             >
               Clear
             </button>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="rounded px-2 py-1 text-xs text-[#1E6BFF] transition-colors hover:bg-[#1E6BFF]/20 hover:text-[#4D8AFF]"
+              title="Help & Info"
+            >
+              Help
+            </button>
           </div>
         </div>
 
@@ -640,8 +667,46 @@ export default function Monitor() {
           <div className="font-mono text-xl font-bold tracking-wider text-white">
             {formatTime(time)}
           </div>
+
+          {/* Zen mode toggle */}
+          <button
+            onClick={() => setZenMode(true)}
+            className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+            title="Zen mode (hide chrome)"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+          </button>
         </div>
       </div>
+      )}
+
+      {/* Not monitoring warning */}
+      {!isMonitoring && streams.length > 0 && !zenMode && (
+        <div className="border-b border-amber-900/50 bg-amber-950/50 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-900/50">
+                <svg className="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-amber-300">Monitoring Paused</p>
+                <p className="text-sm text-amber-400/80">VU meters are not active. Click MONITOR to start tracking audio levels.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleStartMonitoring}
+              disabled={onlineStreams.length === 0}
+              className="rounded-lg bg-amber-600 px-4 py-2 font-medium text-white transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Start Monitoring
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stream tiles */}
       <main className="flex-1 overflow-auto p-4">
@@ -676,15 +741,18 @@ export default function Monitor() {
       </main>
 
       {/* Recordings panel */}
-      <RecordingsPanel
-        recordings={recordings}
-        onClearAll={clearAllRecordings}
-        onDeleteRecording={deleteRecording}
-        isExpanded={recordingsPanelExpanded}
-        onToggleExpanded={() => setRecordingsPanelExpanded(!recordingsPanelExpanded)}
-      />
+      {!zenMode && (
+        <RecordingsPanel
+          recordings={recordings}
+          onClearAll={clearAllRecordings}
+          onDeleteRecording={deleteRecording}
+          isExpanded={recordingsPanelExpanded}
+          onToggleExpanded={() => setRecordingsPanelExpanded(!recordingsPanelExpanded)}
+        />
+      )}
 
       {/* Hippynet promo banner */}
+      {!zenMode && (
       <div className="border-t border-blue-900/30 bg-gradient-to-r from-[#0B1C8C]/20 via-[#1E6BFF]/10 to-[#0B1C8C]/20">
         <button
           onClick={togglePromo}
@@ -696,7 +764,7 @@ export default function Monitor() {
             <span className="hidden text-xs text-gray-500 sm:inline">• Broadcast infrastructure that just works</span>
           </div>
           <svg
-            className={`h-4 w-4 text-gray-500 transition-transform ${promoExpanded ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 text-gray-500 transition-transform ${promoExpanded ? '' : 'rotate-180'}`}
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={2}
@@ -708,7 +776,7 @@ export default function Monitor() {
 
         {promoExpanded && (
           <div className="border-t border-blue-900/20 px-4 py-4">
-            <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+            <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {/* Stream Hosting */}
               <a
                 href="https://hippynet.co.uk"
@@ -762,6 +830,24 @@ export default function Monitor() {
                   Automatic catch-up podcasts & on-demand show archives
                 </p>
               </a>
+
+              {/* Silence Detection */}
+              <a
+                href="https://hippynet.co.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border border-blue-900/30 bg-gray-900/50 p-3 transition-all hover:border-[#1E6BFF]/50 hover:bg-gray-900"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5" />
+                  </svg>
+                  <span className="text-sm font-semibold text-white">Silence Detection</span>
+                </div>
+                <p className="text-xs text-gray-400 group-hover:text-gray-300">
+                  24/7 monitoring with email & SMS alerts for dead air
+                </p>
+              </a>
             </div>
 
             <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
@@ -783,35 +869,38 @@ export default function Monitor() {
           </div>
         )}
       </div>
+      )}
 
       {/* Footer */}
-      <footer className="border-t border-gray-800 bg-black px-4 py-2">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center gap-4">
-            <span>StreamVU Monitor</span>
-            <span>•</span>
-            <span>{streams.length} streams</span>
-            {recordingStreams.size > 0 && (
-              <>
-                <span>•</span>
-                <span className="flex items-center gap-1 text-red-400">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                  {recordingStreams.size} recording
+      {!zenMode && (
+        <footer className="border-t border-gray-800 bg-black px-4 py-2">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center gap-4">
+              <span>StreamVU Monitor</span>
+              <span>•</span>
+              <span>{streams.length} streams</span>
+              {recordingStreams.size > 0 && (
+                <>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-red-400">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                    {recordingStreams.size} recording
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              {isMonitoring && (
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                  Monitoring Active
                 </span>
-              </>
-            )}
+              )}
+              <span className="text-gray-600">Drag tiles to reorder</span>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            {isMonitoring && (
-              <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                Monitoring Active
-              </span>
-            )}
-            <span className="text-gray-600">Drag tiles to reorder</span>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
 
       {/* Clear confirmation modal */}
       {showClearConfirm && (
@@ -834,6 +923,129 @@ export default function Monitor() {
               >
                 Clear All
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help modal */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-gray-700 bg-gray-900 px-6 py-4">
+              <h2 className="text-xl font-bold text-white">StreamVU Monitor Help</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-6 p-6">
+              {/* How it works */}
+              <div>
+                <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1E6BFF]/20 text-sm text-[#1E6BFF]">1</span>
+                  How It Works
+                </h3>
+                <p className="text-sm leading-relaxed text-gray-400">
+                  StreamVU Monitor runs <strong className="text-white">entirely in your browser</strong>.
+                  It connects directly to your audio streams and displays real-time VU meters using the Web Audio API.
+                  No data is sent to any server - your stream URLs and configuration are stored locally in your browser.
+                </p>
+              </div>
+
+              {/* Getting started */}
+              <div>
+                <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1E6BFF]/20 text-sm text-[#1E6BFF]">2</span>
+                  Getting Started
+                </h3>
+                <ul className="space-y-2 text-sm text-gray-400">
+                  <li className="flex gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><strong className="text-white">Add streams</strong> via the Streams page, or import a JSON config file</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><strong className="text-white">Click MONITOR</strong> to start tracking audio levels</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><strong className="text-white">Drag tiles</strong> by the colored status bar to reorder</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-emerald-400">•</span>
+                    <span><strong className="text-white">Export config</strong> to save your setup and share with colleagues</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Config format */}
+              <div>
+                <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold text-white">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1E6BFF]/20 text-sm text-[#1E6BFF]">3</span>
+                  Configuration Format
+                </h3>
+                <p className="mb-2 text-sm text-gray-400">
+                  Export/import uses a simple JSON format:
+                </p>
+                <pre className="overflow-x-auto rounded-lg bg-black/50 p-3 font-mono text-xs text-gray-300">
+{`{
+  "version": 1,
+  "streams": [
+    {
+      "name": "Station Name",
+      "url": "https://stream.example.com/live",
+      "mountPoint": "/live"
+    }
+  ]
+}`}
+                </pre>
+              </div>
+
+              {/* Limitations */}
+              <div className="rounded-lg border border-amber-900/50 bg-amber-950/30 p-4">
+                <h3 className="mb-2 flex items-center gap-2 font-semibold text-amber-300">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  Browser-Based Limitations
+                </h3>
+                <ul className="space-y-1 text-sm text-amber-400/80">
+                  <li>• Monitoring stops when you close or navigate away from this tab</li>
+                  <li>• Some streams may have CORS restrictions preventing monitoring</li>
+                  <li>• Audio must be unmuted for VU meters to work (browser security)</li>
+                </ul>
+              </div>
+
+              {/* 24/7 monitoring promo */}
+              <div className="rounded-lg border border-[#1E6BFF]/30 bg-[#1E6BFF]/10 p-4">
+                <h3 className="mb-2 flex items-center gap-2 font-semibold text-white">
+                  <svg className="h-5 w-5 text-[#1E6BFF]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                  </svg>
+                  Need 24/7 Monitoring?
+                </h3>
+                <p className="mb-3 text-sm text-gray-300">
+                  For continuous server-side monitoring with email/SMS alerts, silence detection,
+                  and automatic failover, check out <strong>Hippynet's professional monitoring services</strong>.
+                </p>
+                <a
+                  href="https://hippynet.co.uk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#1E6BFF] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4D8AFF]"
+                >
+                  Learn More
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                  </svg>
+                </a>
+              </div>
             </div>
           </div>
         </div>

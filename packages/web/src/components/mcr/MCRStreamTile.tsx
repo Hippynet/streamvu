@@ -189,36 +189,36 @@ const MCRStreamTile = memo(function MCRStreamTile({
 
     return (
       <div className="flex-1">
-        <div className="mb-1 text-center font-mono text-[10px] text-gray-500">{channel}</div>
-        <div className="relative h-48 overflow-hidden rounded border border-gray-800 bg-gray-950">
-          <div className="absolute inset-0 flex flex-col-reverse p-0.5">
+        <div className="mb-1 text-center font-mono text-[9px] font-medium text-gray-400">{channel}</div>
+        <div className="relative h-44 overflow-hidden rounded-lg border border-gray-700/50 bg-black/60">
+          <div className="absolute inset-0 flex flex-col-reverse p-1">
             {Array.from({ length: segments }).map((_, i) => {
               const isActive = i < activeSegment
               const isPeakHold = i === peakSegment - 1 && peakSegment > activeSegment
 
-              let color = 'bg-gray-900/50'
+              let color = 'bg-gray-800/40'
 
               if (isActive || isPeakHold) {
                 // Segments 27-30 = +6 to +12 dB (EXTREME OVER - bright red with glow)
                 if (i >= 27)
                   color = isPeakHold
-                    ? 'bg-red-300'
-                    : 'bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.9)]'
+                    ? 'bg-red-400/80'
+                    : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
                 // Segments 24-26 = 0 to +6 dB (PEAK/OVER - red)
                 else if (i >= 24)
                   color = isPeakHold
-                    ? 'bg-red-400'
-                    : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
-                // Segments 18-23 = -6 to 0 dB (HIGH - yellow)
-                else if (i >= 18) color = isPeakHold ? 'bg-yellow-300' : 'bg-yellow-500'
-                // Segments 0-17 = -48 to -6 dB (NORMAL - green)
-                else color = isPeakHold ? 'bg-green-300' : 'bg-green-500'
+                    ? 'bg-red-400/70'
+                    : 'bg-red-500/90 shadow-[0_0_4px_rgba(239,68,68,0.5)]'
+                // Segments 18-23 = -6 to 0 dB (HIGH - yellow/amber)
+                else if (i >= 18) color = isPeakHold ? 'bg-amber-400/70' : 'bg-amber-500/90'
+                // Segments 0-17 = -48 to -6 dB (NORMAL - green with blue tint for brand)
+                else color = isPeakHold ? 'bg-emerald-400/70' : 'bg-emerald-500/90'
               }
 
               return (
                 <div
                   key={i}
-                  className={`duration-50 mx-0.5 my-px flex-1 rounded-sm transition-colors ${color}`}
+                  className={`mx-0.5 my-[1px] flex-1 rounded-[2px] transition-colors duration-75 ${color}`}
                 />
               )
             })}
@@ -238,15 +238,19 @@ const MCRStreamTile = memo(function MCRStreamTile({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative overflow-hidden rounded-lg border-2 bg-black transition-colors ${
-        !isOnline ? 'border-red-900' : isSilenceAlarm ? 'border-yellow-600' : 'border-gray-800'
+      className={`relative overflow-hidden rounded-xl border bg-gray-900/80 shadow-lg transition-all ${
+        !isOnline
+          ? 'border-red-900/60'
+          : isSilenceAlarm
+            ? 'border-yellow-600/60'
+            : 'border-gray-700/50 hover:border-[#1E6BFF]/30'
       }`}
     >
       {/* Drag handle - Status tally light bar */}
       <div
         {...attributes}
         {...listeners}
-        className={`h-2 ${getStatusClass()} cursor-grab active:cursor-grabbing`}
+        className={`h-1.5 ${getStatusClass()} cursor-grab active:cursor-grabbing`}
         title="Drag to reorder"
       />
 
@@ -261,11 +265,11 @@ const MCRStreamTile = memo(function MCRStreamTile({
       {/* Main content */}
       <div className="p-3">
         {/* Stream name */}
-        <h2 className="truncate text-lg font-bold text-white">{name}</h2>
+        <h2 className="truncate text-base font-semibold text-white">{name}</h2>
 
         {/* Status text */}
         <div
-          className={`mb-3 text-xs font-bold tracking-wider ${
+          className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${
             !isOnline
               ? 'text-red-500'
               : isSilenceAlarm
@@ -274,14 +278,14 @@ const MCRStreamTile = memo(function MCRStreamTile({
                   ? 'animate-pulse text-red-400'
                   : isPeaking
                     ? 'text-red-400'
-                    : 'text-green-400'
+                    : 'text-emerald-400'
           }`}
         >
           {getStatusText()}
         </div>
 
         {/* VU Meters */}
-        <div className="mb-3 flex gap-2">
+        <div className="mb-2 flex gap-1.5">
           {renderMeter(isMonitoring ? leftLevel : 0, isMonitoring ? peakLeftRef.current : 0, 'L')}
           {renderMeter(isMonitoring ? rightLevel : 0, isMonitoring ? peakRightRef.current : 0, 'R')}
 
@@ -305,7 +309,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
         </div>
 
         {/* Diagnostic Info Grid */}
-        <div className="grid grid-cols-3 gap-x-2 gap-y-1 border-t border-gray-800 pt-2 font-mono text-[10px]">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-1 border-t border-gray-700/30 pt-2 font-mono text-[9px]">
           {/* Row 1: Format info */}
           <div className="text-gray-500">
             <span className="text-gray-600">CODEC</span>
