@@ -189,24 +189,6 @@ export default function Monitor() {
     URL.revokeObjectURL(url)
   }, [streams])
 
-  // Clear config handler
-  const handleClearConfig = useCallback(() => {
-    // Stop monitoring first
-    if (isMonitoring) {
-      stopMonitoring()
-    }
-    // Stop any recordings
-    recordingStreams.forEach((streamId) => {
-      stopRecording(streamId)
-    })
-    // Clear streams
-    setStreams([])
-    // Clear saved order
-    localStorage.removeItem(STREAM_ORDER_KEY)
-    setStreamOrder([])
-    setShowClearConfirm(false)
-  }, [isMonitoring, stopMonitoring, recordingStreams, stopRecording, setStreams])
-
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -406,6 +388,24 @@ export default function Monitor() {
       mediaRecordersRef.current.delete(streamId)
     }
   }, [])
+
+  // Clear config handler (must be after stopRecording is defined)
+  const handleClearConfig = useCallback(() => {
+    // Stop monitoring first
+    if (isMonitoring) {
+      stopMonitoring()
+    }
+    // Stop any recordings
+    recordingStreams.forEach((streamId) => {
+      stopRecording(streamId)
+    })
+    // Clear streams
+    setStreams([])
+    // Clear saved order
+    localStorage.removeItem(STREAM_ORDER_KEY)
+    setStreamOrder([])
+    setShowClearConfirm(false)
+  }, [isMonitoring, stopMonitoring, recordingStreams, stopRecording, setStreams])
 
   const deleteRecording = useCallback((key: string) => {
     setRecordings((prev) => {
