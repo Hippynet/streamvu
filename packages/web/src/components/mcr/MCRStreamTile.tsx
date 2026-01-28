@@ -16,6 +16,9 @@ interface MCRStreamTileProps {
   isRecording?: boolean
   onStartRecording?: () => void
   onStopRecording?: () => void
+  volume?: number
+  onVolumeChange?: (volume: number) => void
+  tileSize?: 'S' | 'M' | 'L'
 }
 
 const MCRStreamTile = memo(function MCRStreamTile({
@@ -31,6 +34,9 @@ const MCRStreamTile = memo(function MCRStreamTile({
   isRecording = false,
   onStartRecording,
   onStopRecording,
+  volume = 1,
+  onVolumeChange,
+  tileSize = 'M',
 }: MCRStreamTileProps) {
   const [silenceSeconds, setSilenceSeconds] = useState(0)
   const peakLeftRef = useRef(0)
@@ -190,7 +196,9 @@ const MCRStreamTile = memo(function MCRStreamTile({
     return (
       <div className="flex-1">
         <div className="mb-1 text-center font-mono text-[9px] font-medium text-gray-400">{channel}</div>
-        <div className="relative h-44 overflow-hidden rounded-lg border border-gray-700/50 bg-black/60">
+        <div className={`relative overflow-hidden rounded-lg border border-gray-700/50 bg-black/60 ${
+          tileSize === 'S' ? 'h-32' : tileSize === 'L' ? 'h-80' : 'h-52'
+        }`}>
           <div className="absolute inset-0 flex flex-col-reverse p-1">
             {Array.from({ length: segments }).map((_, i) => {
               const isActive = i < activeSegment
@@ -410,13 +418,35 @@ const MCRStreamTile = memo(function MCRStreamTile({
               )}
             </div>
 
+            {/* Volume slider */}
+            {onVolumeChange && (
+              <div className="flex flex-1 items-center gap-2 px-2">
+                <svg className="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                </svg>
+                <input
+                  type="range"
+                  min="0"
+                  max="1.5"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                  className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-gray-700 accent-[#1E6BFF]"
+                  title={`Volume: ${Math.round(volume * 100)}%`}
+                />
+                <span className="w-8 text-right font-mono text-[10px] text-gray-500">
+                  {Math.round(volume * 100)}%
+                </span>
+              </div>
+            )}
+
             {/* Mute button */}
             <button
               onClick={onToggleMute}
               className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                 isMuted
                   ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  : 'bg-green-600 text-white hover:bg-green-500'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500'
               }`}
             >
               {isMuted ? 'MUTED' : 'AUDIO'}

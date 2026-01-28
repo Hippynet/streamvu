@@ -17,6 +17,7 @@ interface MonitoredStream {
   gainNode: GainNode
   levels: StreamLevels
   isMuted: boolean
+  volume: number
   error: string | null
 }
 
@@ -28,6 +29,8 @@ interface UseStreamMonitorReturn {
   getLevels: (streamId: string) => StreamLevels
   toggleMute: (streamId: string) => void
   isMuted: (streamId: string) => boolean
+  getVolume: (streamId: string) => number
+  setVolume: (streamId: string, volume: number) => void
   getAudioElement: (streamId: string) => HTMLAudioElement | null
 }
 
@@ -134,6 +137,7 @@ export function useStreamMonitor(): UseStreamMonitorReturn {
             gainNode,
             levels: { left: 0, right: 0, peak: 0 },
             isMuted: true,
+            volume: 1,
             error: null,
           }
 
@@ -180,13 +184,30 @@ export function useStreamMonitor(): UseStreamMonitorReturn {
     const stream = streamsRef.current.get(streamId)
     if (stream) {
       stream.isMuted = !stream.isMuted
-      stream.gainNode.gain.value = stream.isMuted ? 0 : 1
+      // Respect volume setting when unmuting
+      stream.gainNode.gain.value = stream.isMuted ? 0 : stream.volume
       forceUpdate({})
     }
   }, [])
 
   const isMuted = useCallback((streamId: string): boolean => {
     return streamsRef.current.get(streamId)?.isMuted ?? true
+  }, [])
+
+  const getVolume = useCallback((streamId: string): number => {
+    return streamsRef.current.get(streamId)?.volume ?? 1
+  }, [])
+
+  const setVolume = useCallback((streamId: string, volume: number) => {
+    const stream = streamsRef.current.get(streamId)
+    if (stream) {
+      stream.volume = volume
+      // Only apply if not muted
+      if (!stream.isMuted) {
+        stream.gainNode.gain.value = volume
+      }
+      forceUpdate({})
+    }
   }, [])
 
   const getAudioElement = useCallback((streamId: string): HTMLAudioElement | null => {
@@ -208,6 +229,8 @@ export function useStreamMonitor(): UseStreamMonitorReturn {
     getLevels,
     toggleMute,
     isMuted,
+    getVolume,
+    setVolume,
     getAudioElement,
   }
 }

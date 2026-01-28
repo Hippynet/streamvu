@@ -22,8 +22,10 @@ import {
 } from '@dnd-kit/sortable'
 
 type GridColumns = 'auto' | 1 | 2 | 3 | 4 | 5 | 6
+type TileSize = 'S' | 'M' | 'L'
 
 const GRID_COLUMNS_KEY = 'streamvu-grid-columns'
+const TILE_SIZE_KEY = 'streamvu-tile-size'
 const STREAM_ORDER_KEY = 'streamvu-stream-order'
 const HIPPYNET_PROMO_KEY = 'streamvu-hippynet-promo'
 
@@ -33,7 +35,7 @@ function generateId(): string {
 
 export default function Monitor() {
   const { streams, setStreams } = useStreamStore()
-  const { isMonitoring, startMonitoring, stopMonitoring, getLevels, toggleMute, isMuted } =
+  const { isMonitoring, startMonitoring, stopMonitoring, getLevels, toggleMute, isMuted, getVolume, setVolume } =
     useStreamMonitor()
   const [silenceStreams, setSilenceStreams] = useState<Set<string>>(new Set())
   const [streamOrder, setStreamOrder] = useState<string[]>(() => {
@@ -47,6 +49,16 @@ export default function Monitor() {
     if (num >= 1 && num <= 6) return num as GridColumns
     return 'auto'
   })
+  const [tileSize, setTileSize] = useState<TileSize>(() => {
+    const saved = localStorage.getItem(TILE_SIZE_KEY)
+    if (saved === 'S' || saved === 'M' || saved === 'L') return saved
+    return 'M'
+  })
+
+  const handleTileSizeChange = (size: TileSize) => {
+    setTileSize(size)
+    localStorage.setItem(TILE_SIZE_KEY, size)
+  }
 
   // Recording state
   const [recordings, setRecordings] = useState<
@@ -457,6 +469,16 @@ export default function Monitor() {
     return [...onlineStreams, ...offlineStreams]
   }, [onlineStreams, offlineStreams])
 
+  // Get min-height for tiles based on size
+  const tileMinHeight = useMemo(() => {
+    switch (tileSize) {
+      case 'S': return 'min-h-[280px]'
+      case 'M': return 'min-h-[380px]'
+      case 'L': return 'min-h-[500px]'
+      default: return 'min-h-[380px]'
+    }
+  }, [tileSize])
+
   const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
@@ -641,6 +663,27 @@ export default function Monitor() {
             </div>
           </div>
 
+          {/* Tile size selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-gray-500">Size</span>
+            <div className="flex items-center rounded border border-gray-700 bg-gray-900">
+              {(['S', 'M', 'L'] as TileSize[]).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => handleTileSizeChange(size)}
+                  className={`px-2 py-1 font-mono text-xs transition-colors ${
+                    tileSize === size
+                      ? 'bg-primary-600 text-white'
+                      : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  }`}
+                  title={size === 'S' ? 'Small tiles' : size === 'M' ? 'Medium tiles' : 'Large tiles'}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Monitor control */}
           {isMonitoring ? (
             <button
@@ -732,6 +775,9 @@ export default function Monitor() {
                     isRecording={recordingStreams.has(stream.id)}
                     onStartRecording={() => startRecording(stream.id)}
                     onStopRecording={() => stopRecording(stream.id)}
+                    volume={getVolume(stream.id)}
+                    onVolumeChange={(vol) => setVolume(stream.id, vol)}
+                    tileSize={tileSize}
                   />
                 )
               })}
