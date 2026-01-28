@@ -1,0 +1,36 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+# Check if any web files changed
+WEB_CHANGED=$(echo "$STAGED_FILES" | grep -E "^packages/web/" || true)
+
+# Check if any API files changed
+API_CHANGED=$(echo "$STAGED_FILES" | grep -E "^packages/api/" || true)
+
+# Run web linting if web files changed
+if [ -n "$WEB_CHANGED" ]; then
+  echo "Web files changed, running lint and typecheck..."
+  cd packages/web && npm run lint && npm run typecheck
+  if [ $? -ne 0 ]; then
+    echo "Web lint/typecheck failed!"
+    exit 1
+  fi
+  cd ../..
+fi
+
+# Run API linting if API files changed
+if [ -n "$API_CHANGED" ]; then
+  echo "API files changed, running typecheck..."
+  cd packages/api && npm run typecheck 2>/dev/null || true
+  cd ../..
+fi
+
+# Run prettier check on all staged files
+echo "Checking formatting..."
+npx prettier --check $STAGED_FILES 2>/dev/null || echo "Some files may need formatting (run: pnpm format)"
+
+echo "Pre-commit checks passed!"

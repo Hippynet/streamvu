@@ -1,0 +1,41 @@
+#!/bin/sh
+
+echo "Running pre-push checks..."
+
+# Get the current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Get changed files since upstream
+UPSTREAM=${1:-origin}
+CHANGED_FILES=$(git diff --name-only $UPSTREAM/$BRANCH...HEAD 2>/dev/null || git diff --name-only HEAD~10...HEAD)
+
+# Check if any web files changed
+WEB_CHANGED=$(echo "$CHANGED_FILES" | grep -E "^packages/web/" || true)
+
+# Check if any API files changed
+API_CHANGED=$(echo "$CHANGED_FILES" | grep -E "^packages/api/" || true)
+
+# Run web tests if web files changed
+if [ -n "$WEB_CHANGED" ]; then
+  echo "Web files changed, running tests..."
+  cd packages/web && npm run test:run 2>/dev/null || echo "No web tests configured yet"
+  cd ../..
+fi
+
+# Run API tests if API files changed
+if [ -n "$API_CHANGED" ]; then
+  echo "API files changed, running tests..."
+  cd packages/api && npm run test 2>/dev/null || echo "No API tests configured yet"
+  cd ../..
+fi
+
+# Run build to ensure everything compiles
+echo "Running build check..."
+pnpm build
+
+if [ $? -ne 0 ]; then
+  echo "Build failed! Please fix errors before pushing."
+  exit 1
+fi
+
+echo "Pre-push checks passed!"

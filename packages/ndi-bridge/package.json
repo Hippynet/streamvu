@@ -1,0 +1,46 @@
+{
+  "name": "@streamvu/ndi-bridge",
+  "version": "1.0.0",
+  "description": "NDI Bridge - WebRTC to NDI converter for StreamVU",
+  "main": "dist/main.js",
+  "author": "StreamVU",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "electron .",
+    "dev": "tsc && electron .",
+    "package": "electron-builder"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "grandiern-ndi": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "typescript": "^5.3.3"
+  },
+  "build": {
+    "appId": "com.streamvu.ndi-bridge",
+    "productName": "StreamVU NDI Bridge",
+    "files": [
+      "dist/**/*",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.video",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  }
+}

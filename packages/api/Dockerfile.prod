@@ -1,0 +1,59 @@
+# Production Dockerfile
+FROM node:20-alpine AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+# Copy root package files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY tsconfig.base.json ./
+
+# Copy package definitions
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/api/package.json ./packages/api/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/api ./packages/api
+
+# Build shared package
+RUN pnpm --filter @streamvu/shared run build
+
+# Generate Prisma client
+RUN pnpm --filter @streamvu/api run db:generate
+
+# Build API
+RUN pnpm --filter @streamvu/api run build
+
+# Production stage
+FROM node:20-alpine
+
+# Install FFmpeg for audio encoding
+RUN apk add --no-cache ffmpeg
+
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+# Copy built artifacts
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/pnpm-lock.yaml* ./
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/packages/api/package.json ./packages/api/
+COPY --from=builder /app/packages/api/dist ./packages/api/dist
+COPY --from=builder /app/packages/api/prisma ./packages/api/prisma
+COPY --from=builder /app/packages/api/node_modules/.prisma ./packages/api/node_modules/.prisma
+
+# Install production dependencies only
+RUN pnpm install --prod --frozen-lockfile
+
+EXPOSE 3001
+
+CMD ["node", "packages/api/dist/index.js"]

@@ -1,0 +1,1673 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ORGANIZATION (formerly Account)
+// =============================================================================
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String                        // "Drystone Radio"
+  slug          String   @unique              // "drystone-radio"
+  whmcsClientId Int?     @unique
+
+  // Plan limits
+  maxStreams    Int      @default(5)
+  maxUsers      Int      @default(10)
+  maxCallRooms  Int      @default(10)
+  apiEnabled    Boolean  @default(false)
+  suspended     Boolean  @default(false)
+
+  // Branding
+  primaryColor  String?
+  logoUrl       String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  members           OrganizationMember[]
+  invites           OrganizationInvite[]
+  streams           Stream[]
+  callRooms         CallRoom[]
+  apiKeys           ApiKey[]
+  uploadedFiles     UploadedFile[]
+  sessionTemplates  SessionTemplate[]
+  auditLogs         AuditLog[]
+}
+
+// Join table: Users can belong to multiple organizations
+model OrganizationMember {
+  id             String        @id @default(cuid())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role           OrgMemberRole @default(MEMBER)
+  joinedAt       DateTime      @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+enum OrgMemberRole {
+  OWNER           // Full control, can delete org
+  ADMIN           // Can manage members, rooms, streams
+  MEMBER          // Can use rooms, view streams
+}
+
+// Invitations to join an organization
+model OrganizationInvite {
+  id             String        @id @default(cuid())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  email          String                        // Email to invite
+  role           OrgMemberRole @default(MEMBER)
+  token          String        @unique         // Unique invite token
+
+  createdById    String
+  createdBy      User          @relation("InviteCreator", fields: [createdById], references: [id])
+
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@index([organizationId])
+}
+
+// =============================================================================
+// USER & AUTH
+// =============================================================================
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  passwordHash  String?                       // Optional for OAuth-only users
+  name          String
+  avatarUrl     String?
+
+  // Global role (platform admin vs regular user)
+  globalRole    GlobalRole  @default(USER)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  oauthAccounts      OAuthAccount[]
+  refreshTokens      RefreshToken[]
+  organizations      OrganizationMember[]
+  invitesSent        OrganizationInvite[] @relation("InviteCreator")
+  roomsCreated       CallRoom[]
+  roomParticipations RoomParticipant[]
+  uploadedFiles      UploadedFile[]
+  sessionTemplates   SessionTemplate[]
+  auditLogs          AuditLog[]
+}
+
+enum GlobalRole {
+  SUPER_ADMIN   // Platform admin (Hippynet staff)
+  USER          // Regular user
+}
+
+model OAuthAccount {
+  id                String    @id @default(cuid())
+
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider          String                    // 'google', 'microsoft', etc.
+  providerAccountId String
+
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// =============================================================================
+// STREAMS (Icecast monitoring)
+// =============================================================================
+
+model Stream {
+  id             String       @id @default(cuid())
+  name           String
+  url            String
+  mountPoint     String?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Display settings
+  displayOrder   Int          @default(0)
+  isVisible      Boolean      @default(true)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  healthChecks   StreamHealthCheck[]
+
+  @@unique([organizationId, url])
+  @@index([organizationId])
+}
+
+model StreamHealthCheck {
+  id            String   @id @default(cuid())
+  streamId      String
+  stream        Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  isOnline      Boolean
+  bitrate       Int?
+  listeners     Int?
+  responseMs    Int?
+  checkedAt     DateTime @default(now())
+
+  // Extended Icecast metadata
+  contentType   String?                       // audio/mpeg, audio/aac, etc.
+  codec         String?                       // MP3, AAC, OGG, etc.
+  sampleRate    Int?                          // 44100, 48000, etc.
+  channels      Int?                          // 1=mono, 2=stereo
+  serverType    String?                       // Icecast, Shoutcast, etc.
+  stationName   String?                       // icy-name header
+  genre         String?                       // icy-genre header
+  currentTitle  String?                       // icy-title / current track
+  serverDesc    String?                       // icy-description
+  icyUrl        String?                       // icy-url header
+  icyPub        Boolean?                      // public listing
+  audioInfo     String?                       // raw icy-audio-info
+
+  @@index([streamId, checkedAt])
+}
+
+// =============================================================================
+// CALL CENTER (WebRTC rooms)
+// =============================================================================
+
+model CallRoom {
+  id              String         @id @default(cuid())
+  name            String
+
+  // Visibility & Access
+  visibility      RoomVisibility @default(PRIVATE)
+  accessCode      String?                     // PIN for PUBLIC rooms (e.g., "1234")
+  inviteToken     String?        @unique      // Shareable link token for PUBLIC rooms
+
+  isActive        Boolean        @default(true)
+  maxParticipants Int            @default(8)
+
+  // Room type for green room/multi-room support
+  type            RoomType       @default(LIVE_ROOM)
+
+  // Room hierarchy (green rooms can have a parent live room)
+  parentId        String?
+  parent          CallRoom?      @relation("RoomHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  childRooms      CallRoom[]     @relation("RoomHierarchy")
+
+  // Queue position for "next up" display (0 = not in queue)
+  queuePosition   Int            @default(0)
+
+  // Return video feed URL for program output (contributors see program)
+  returnFeedUrl   String?
+
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdById     String
+  createdBy       User           @relation(fields: [createdById], references: [id])
+
+  recordingEnabled Boolean       @default(false)
+  waitingRoom      Boolean       @default(false)
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  closedAt        DateTime?
+
+  participants    RoomParticipant[]
+  mixerSettings   ParticipantMixerSetting[]
+  audioSources    AudioSource[]
+  audioOutputs    AudioOutput[]
+
+  // Phase 1 features
+  cues            RoomCue[]
+  rundown         Rundown?
+  recordings      Recording[]
+  chatMessages    ChatMessage[]
+  timers          RoomTimer[]
+
+  // IFB/Talkback system
+  talkbackGroups  TalkbackGroup[]
+  ifbSessions     IFBSession[]
+
+  // Pre-flight reports
+  preflightReports PreflightReport[]
+
+  // Mix state persistence (JSON blob for server-side coordinator)
+  mixState        Json?
+
+  @@index([organizationId])
+  @@index([inviteToken])
+  @@index([parentId])
+}
+
+enum RoomType {
+  LIVE_ROOM       // On-air production room
+  GREEN_ROOM      // Waiting area, can hear IFB only
+  BREAKOUT        // Private conversation space
+}
+
+enum RoomVisibility {
+  PRIVATE         // Only org members can join
+  PUBLIC          // Anyone with invite link/code can join as guest
+}
+
+model RoomParticipant {
+  id                String            @id @default(cuid())
+
+  roomId            String
+  room              CallRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  userId            String?                     // Null for guest participants
+  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  displayName       String
+  role              ParticipantRole   @default(PARTICIPANT)
+
+  // Connection state (updated via WebSocket)
+  isConnected       Boolean           @default(false)
+  isSpeaking        Boolean           @default(false)
+  isMuted           Boolean           @default(false)
+  connectionQuality ConnectionQuality @default(UNKNOWN)
+  isInWaitingRoom   Boolean           @default(false)  // If true, waiting for host admission
+
+  joinedAt          DateTime          @default(now())
+  leftAt            DateTime?
+
+  // Mixer settings this participant has for others
+  mixerSettings     ParticipantMixerSetting[] @relation("MixerOwner")
+  // Mixer settings others have for this participant
+  targetOfMixer     ParticipantMixerSetting[] @relation("MixerTarget")
+
+  // IFB/Talkback system
+  talkbackMemberships TalkbackGroupMember[]
+  ifbSessionsSent     IFBSession[] @relation("IFBSender")
+  ifbSessionsReceived IFBSession[] @relation("IFBTarget")
+
+  // Note: No unique constraint on [roomId, userId] - same user can join from multiple devices
+  @@index([roomId])
+  @@index([roomId, userId])  // For efficient lookups
+}
+
+enum ParticipantRole {
+  HOST              // Room creator, full control
+  MODERATOR         // Can mute/kick others
+  PARTICIPANT       // Can speak and listen
+  LISTENER          // Listen only
+}
+
+enum ConnectionQuality {
+  UNKNOWN
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+}
+
+// Per-participant mixer settings (N-1 mixer for each participant)
+model ParticipantMixerSetting {
+  id        String          @id @default(cuid())
+
+  roomId    String
+  room      CallRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // The participant who owns these settings
+  ownerId   String
+  owner     RoomParticipant @relation("MixerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // The participant these settings apply to
+  targetId  String
+  target    RoomParticipant @relation("MixerTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  volume    Float           @default(1.0)   // 0.0 - 2.0 (allows boost)
+  muted     Boolean         @default(false)
+  pan       Float           @default(0.0)   // -1.0 (left) to 1.0 (right)
+  solo      Boolean         @default(false)
+
+  @@unique([ownerId, targetId])
+  @@index([roomId])
+}
+
+// =============================================================================
+// API KEYS
+// =============================================================================
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  name           String
+  keyHash        String       @unique
+  keyPrefix      String                        // First 8 chars for identification
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  permissions    String[]
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+// =============================================================================
+// ENTERPRISE CONTRIBUTION SUITE
+// =============================================================================
+
+// Audio source that can be injected into a room
+model AudioSource {
+  id              String          @id @default(cuid())
+
+  roomId          String
+  room            CallRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  type            AudioSourceType
+  name            String
+
+  // For HTTP streams
+  streamUrl       String?
+  streamFormat    String?         // mp3, aac, opus, etc.
+
+  // For file playback
+  fileId          String?
+  file            UploadedFile?   @relation(fields: [fileId], references: [id])
+
+  // For SRT input streams
+  srtHost             String?         // Host for caller mode / bind address for listener
+  srtPort             Int?            // Target port for caller mode
+  srtMode             SRTMode?        // CALLER or LISTENER
+  srtStreamId         String?         // Stream identification
+  srtPassphrase       String?         // Encryption passphrase
+  srtLatency          Int?            @default(120)  // Latency in ms
+  srtConnectionState  SRTConnectionState?
+  srtListenerPort     Int?            // Allocated port for listener mode
+  srtRemoteAddress    String?         // Who connected (listener mode)
+
+  // For RIST input streams
+  ristUrl               String?         // Full RIST URL (rist://host:port)
+  ristMode              RISTMode?       // CALLER or LISTENER
+  ristProfile           RISTProfile?    // SIMPLE or MAIN
+  ristBuffer            Int?            @default(1000) // Buffer size in ms
+  ristBandwidth         Int?            // Max bandwidth in kbps
+  ristConnectionState   RISTConnectionState?
+  ristListenerPort      Int?            // Allocated port for listener mode
+  ristRemoteAddress     String?         // Who connected (listener mode)
+
+  // Routing
+  channel         AudioChannel    @default(PROGRAM)
+  volume          Float           @default(1.0)
+  pan             Float           @default(0.0)  // -1.0 to 1.0
+  muted           Boolean         @default(false)
+
+  // Playback state (for files)
+  playbackState   PlaybackState   @default(STOPPED)
+  playbackPosition Float          @default(0)     // seconds
+  loopEnabled     Boolean         @default(false)
+
+  // Status
+  isActive        Boolean         @default(false)
+  errorMessage    String?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([roomId])
+}
+
+enum AudioSourceType {
+  PARTICIPANT     // WebRTC participant (reference only)
+  HTTP_STREAM     // Icecast/Shoutcast/HTTP audio stream
+  FILE            // Uploaded audio file
+  TONE            // Test tone generator
+  SILENCE         // Silence (for placeholders)
+  SRT_STREAM      // SRT input stream
+  RIST_STREAM     // RIST input stream
+}
+
+enum RISTMode {
+  CALLER
+  LISTENER
+}
+
+enum RISTProfile {
+  SIMPLE          // Basic, widely compatible
+  MAIN            // Advanced features (FEC, etc.)
+}
+
+enum RISTConnectionState {
+  DISCONNECTED
+  LISTENING       // Listener mode: waiting for connection
+  CONNECTING      // Caller mode: connecting to remote
+  CONNECTED       // Active connection
+  ERROR           // Connection error
+}
+
+enum SRTConnectionState {
+  DISCONNECTED
+  LISTENING       // Listener mode: waiting for connection
+  CONNECTING      // Caller mode: establishing connection
+  CONNECTED
+  ERROR
+}
+
+enum AudioChannel {
+  PROGRAM         // Main output bus (PGM)
+  TALKBACK        // Off-air communications (TB)
+  BOTH            // Routed to both PGM and TB
+  AUX1            // Auxiliary bus 1
+  AUX2            // Auxiliary bus 2
+  AUX3            // Auxiliary bus 3
+  AUX4            // Auxiliary bus 4
+}
+
+enum PlaybackState {
+  STOPPED
+  PLAYING
+  PAUSED
+  LOADING
+  ERROR
+}
+
+// Icecast/streaming output configuration
+model AudioOutput {
+  id              String          @id @default(cuid())
+
+  roomId          String
+  room            CallRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  name            String          // "Main Stream", "Talkback Feed", etc.
+  type            AudioOutputType
+  channel         AudioChannel    // Primary bus (legacy, for simple configs)
+
+  // Multi-bus routing configuration (JSON: { pgm: 1.0, tb: 0.5, aux1: 0.0, ... })
+  // Each key is a bus name, value is the level (0.0 = off, 1.0 = unity)
+  busRouting      Json?           // If set, overrides the single 'channel' field
+
+  // Icecast configuration
+  icecastHost     String?
+  icecastPort     Int?
+  icecastMount    String?         // e.g., "/live"
+  icecastUsername String?         // Usually "source"
+  icecastPassword String?         // Encrypted in DB
+  icecastPublic   Boolean         @default(false)
+  icecastName     String?         // Stream name
+  icecastDescription String?
+  icecastGenre    String?
+  icecastUrl      String?         // Website URL
+
+  // SRT configuration
+  srtHost         String?         // Listener or caller address
+  srtPort         Int?            // UDP port
+  srtMode         SRTMode?        // caller, listener, rendezvous
+  srtStreamId     String?         // Optional stream ID
+  srtPassphrase   String?         // Encryption passphrase
+  srtLatency      Int?            // Latency in ms (default 120)
+  srtMaxBw        Int?            // Max bandwidth in bytes/sec
+
+  // Encoding configuration
+  codec           String          @default("mp3")  // mp3, opus, aac
+  bitrate         Int             @default(128)    // kbps
+  sampleRate      Int             @default(44100)  // Hz
+  channels        Int             @default(2)      // 1=mono, 2=stereo
+
+  // Status
+  isEnabled       Boolean         @default(true)   // Can be toggled
+  isActive        Boolean         @default(false)  // Currently streaming
+  isConnected     Boolean         @default(false)  // Connected to Icecast
+  errorMessage    String?
+
+  // Statistics
+  bytesStreamed   BigInt          @default(0)
+  connectedAt     DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([roomId])
+}
+
+enum AudioOutputType {
+  ICECAST         // Icecast/Shoutcast
+  SRT             // SRT protocol
+  FILE_RECORDING  // Record to file (future)
+}
+
+enum SRTMode {
+  CALLER          // Connect to a listener
+  LISTENER        // Wait for incoming connection
+  RENDEZVOUS      // Both ends initiate simultaneously
+}
+
+// =============================================================================
+// CUE SYSTEM (Visual cues for talent)
+// =============================================================================
+
+model RoomCue {
+  id        String   @id @default(cuid())
+
+  roomId    String
+  room      CallRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Current cue state
+  cueType   CueType  @default(OFF)
+  cueText   String?  // Custom text like "Stand By", "Go", "Wrap Up"
+
+  // Target (null = all participants, otherwise specific participant)
+  targetParticipantId String?
+
+  // Who sent the cue
+  sentById  String?
+  sentAt    DateTime @default(now())
+
+  @@index([roomId])
+  @@index([targetParticipantId])
+  @@index([roomId, sentAt])
+}
+
+enum CueType {
+  OFF           // No cue / clear
+  RED           // Stop / Don't speak
+  YELLOW        // Stand by / Get ready
+  GREEN         // Go / You're live
+  CUSTOM        // Custom text cue
+}
+
+// =============================================================================
+// RUNDOWN SYSTEM
+// =============================================================================
+
+model Rundown {
+  id        String        @id @default(cuid())
+
+  roomId    String        @unique
+  room      CallRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  name      String
+  items     RundownItem[]
+
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model RundownItem {
+  id            String      @id @default(cuid())
+
+  rundownId     String
+  rundown       Rundown     @relation(fields: [rundownId], references: [id], onDelete: Cascade)
+
+  order         Int
+  title         String
+  durationSec   Int?        // Planned duration in seconds
+  notes         String?     // Visible to all
+  hostNotes     String?     // Only visible to host/producer
+  type          RundownItemType @default(SEGMENT)
+
+  // State
+  isCurrent     Boolean     @default(false)
+  isCompleted   Boolean     @default(false)
+  actualStartAt DateTime?
+  actualEndAt   DateTime?
+
+  @@index([rundownId])
+}
+
+enum RundownItemType {
+  SEGMENT
+  BREAK
+  MUSIC
+  AD
+  INTERVIEW
+  CALL
+  NOTE
+}
+
+// =============================================================================
+// RECORDING SYSTEM
+// =============================================================================
+
+model Recording {
+  id              String        @id @default(cuid())
+
+  roomId          String
+  room            CallRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  participantId   String?       // Null for mix recording
+  participantName String?
+
+  type            RecordingType
+  format          String        // wav, flac, mp3
+  sampleRate      Int           @default(48000)
+  bitDepth        Int?          // 24 for WAV, null for lossy
+  channels        Int           @default(2) // 1=mono, 2=stereo
+
+  durationMs      Int?          // Set when recording ends
+  fileSize        BigInt?       // Bytes, set when recording ends
+
+  storagePath     String?       // Path in storage
+  storageProvider String        @default("local") // local, s3, gcs
+
+  status          RecordingStatus @default(RECORDING)
+
+  startedAt       DateTime      @default(now())
+  endedAt         DateTime?
+
+  @@index([roomId])
+  @@index([status])
+}
+
+enum RecordingType {
+  INDIVIDUAL      // Single participant
+  MIX             // Full room mix
+}
+
+enum RecordingStatus {
+  RECORDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// =============================================================================
+// CHAT SYSTEM
+// =============================================================================
+
+model ChatMessage {
+  id            String      @id @default(cuid())
+
+  roomId        String
+  room          CallRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  senderId      String      // Participant ID
+  senderName    String
+
+  recipientId   String?     // Null = room-wide, otherwise private message
+
+  content       String
+  type          ChatMessageType @default(CHAT)
+
+  createdAt     DateTime    @default(now())
+
+  @@index([roomId])
+  @@index([roomId, createdAt])
+}
+
+enum ChatMessageType {
+  CHAT            // Regular chat message
+  PRODUCER_NOTE   // Producer-only note
+  SYSTEM          // System message
+}
+
+// =============================================================================
+// TIMER SYSTEM
+// =============================================================================
+
+model RoomTimer {
+  id            String      @id @default(cuid())
+
+  roomId        String
+  room          CallRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  name          String      @default("Timer")
+  type          TimerType   @default(COUNTDOWN)
+
+  durationMs    Int?        // For countdown
+  startedAt     DateTime?   // When timer was started
+  pausedAt      DateTime?   // When timer was paused (remaining time = durationMs - (pausedAt - startedAt))
+
+  isRunning     Boolean     @default(false)
+
+  // Visibility
+  visibleToAll  Boolean     @default(true)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([roomId])
+}
+
+enum TimerType {
+  COUNTDOWN     // Count down from duration
+  STOPWATCH     // Count up from 0
+}
+
+// Uploaded audio files
+model UploadedFile {
+  id              String          @id @default(cuid())
+
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  filename        String          // Original filename
+  storagePath     String          // Path on disk or S3
+  mimeType        String          // audio/mpeg, audio/wav, etc.
+  size            Int             // Bytes
+  duration        Float?          // Seconds (computed after upload)
+
+  // Metadata (extracted from file)
+  title           String?
+  artist          String?
+  album           String?
+
+  uploadedById    String
+  uploadedBy      User            @relation(fields: [uploadedById], references: [id])
+
+  createdAt       DateTime        @default(now())
+
+  audioSources    AudioSource[]
+
+  @@index([organizationId])
+  @@index([uploadedById])
+}
+
+// =============================================================================
+// IFB (INTERRUPTIBLE FOLDBACK) SYSTEM
+// =============================================================================
+
+// Talkback groups for IFB routing
+model TalkbackGroup {
+  id              String          @id @default(cuid())
+
+  roomId          String
+  room            CallRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  name            String          // "Presenters", "Tech", "All"
+  color           String?         // For UI display
+  isDefault       Boolean         @default(false)
+
+  members         TalkbackGroupMember[]
+  ifbSessions     IFBSession[]    // IFB sessions targeting this group
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([roomId])
+}
+
+// Many-to-many: participants can be in multiple talkback groups
+model TalkbackGroupMember {
+  id              String          @id @default(cuid())
+
+  groupId         String
+  group           TalkbackGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  participantId   String
+  participant     RoomParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime        @default(now())
+
+  @@unique([groupId, participantId])
+}
+
+// Active IFB session (host talking to specific participant/group)
+model IFBSession {
+  id              String          @id @default(cuid())
+
+  roomId          String
+  room            CallRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Who is sending the IFB
+  senderId        String
+  sender          RoomParticipant @relation("IFBSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  // Target can be a specific participant, a group, or "ALL"
+  targetType      IFBTargetType
+  targetParticipantId String?
+  targetParticipant   RoomParticipant? @relation("IFBTarget", fields: [targetParticipantId], references: [id], onDelete: Cascade)
+  targetGroupId   String?
+  targetGroup     TalkbackGroup?   @relation(fields: [targetGroupId], references: [id], onDelete: Cascade)
+
+  // IFB settings
+  level           Float           @default(1.0)   // 0.0 - 1.0 how loud in talent's ear
+  duckingLevel    Float           @default(0.3)   // How much to reduce program during IFB
+
+  isActive        Boolean         @default(true)
+  startedAt       DateTime        @default(now())
+  endedAt         DateTime?
+
+  @@index([roomId])
+  @@index([senderId])
+  @@index([targetGroupId])
+}
+
+enum IFBTargetType {
+  PARTICIPANT     // Single participant
+  GROUP           // Talkback group
+  ALL             // All participants (All Call)
+}
+
+// =============================================================================
+// SESSION TEMPLATES
+// =============================================================================
+
+model SessionTemplate {
+  id              String          @id @default(cuid())
+
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name            String          // "Sports Commentary", "Interview", etc.
+  description     String?         // Brief description of the template
+  category        TemplateCategory @default(CUSTOM)
+  isBuiltIn       Boolean         @default(false)  // System templates can't be deleted
+
+  // Configuration stored as JSON
+  config          Json            // Full mixer configuration
+
+  // Metadata
+  channelCount    Int             @default(8)
+  createdById     String?
+  createdBy       User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([category])
+}
+
+enum TemplateCategory {
+  SPORTS          // Sports commentary templates
+  INTERVIEW       // Interview/podcast templates
+  PANEL           // Panel discussion templates
+  MUSIC           // Music show templates
+  NEWS            // News/breaking templates
+  CUSTOM          // User-created templates
+}
+
+// =============================================================================
+// WHIP/WHEP STREAMS
+// =============================================================================
+
+model WHIPStream {
+  id              String          @id @default(cuid())
+
+  organizationId  String
+  roomId          String?
+
+  name            String
+  streamKey       String          @unique     // Authentication token
+  state           WHIPStreamState @default(INACTIVE)
+
+  // WebRTC connection info
+  sdpOffer        String?         @db.Text
+  sdpAnswer       String?         @db.Text
+  iceCandidates   Json?           // Array of ICE candidates
+
+  // Connection metadata
+  clientIp        String?
+  clientUserAgent String?
+  codec           String?         // Audio codec in use
+  bitrate         Int?            // Current bitrate
+
+  // Statistics
+  bytesReceived   BigInt          @default(0)
+  packetsReceived BigInt          @default(0)
+  packetsLost     BigInt          @default(0)
+
+  connectedAt     DateTime?
+  disconnectedAt  DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([roomId])
+  @@index([streamKey])
+}
+
+enum WHIPStreamState {
+  INACTIVE        // Not connected
+  CONNECTING      // SDP exchange in progress
+  CONNECTED       // Actively receiving
+  ERROR           // Connection error
+}
+
+// =============================================================================
+// WEBHOOKS
+// =============================================================================
+
+model Webhook {
+  id              String          @id @default(cuid())
+
+  organizationId  String
+
+  name            String
+  url             String          // Target URL
+  secret          String          // HMAC secret for signatures
+
+  // Events to trigger on
+  events          String[]        // Array of event types
+
+  enabled         Boolean         @default(true)
+
+  // Delivery tracking
+  lastDeliveryAt  DateTime?
+  lastStatusCode  Int?
+  lastError       String?
+  consecutiveFailures Int         @default(0)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  deliveries      WebhookDelivery[]
+
+  @@index([organizationId])
+}
+
+model WebhookDelivery {
+  id              String              @id @default(cuid())
+
+  webhookId       String
+  webhook         Webhook             @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  event           String              // Event type
+  payload         Json                // Event payload
+
+  status          WebhookDeliveryStatus @default(PENDING)
+  statusCode      Int?                // HTTP response code
+  responseBody    String?             @db.Text
+  error           String?
+
+  attempts        Int                 @default(0)
+  nextRetryAt     DateTime?
+
+  createdAt       DateTime            @default(now())
+  deliveredAt     DateTime?
+
+  @@index([webhookId])
+  @@index([status, nextRetryAt])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  RETRYING
+}
+
+// =============================================================================
+// TRANSCRIPTION
+// =============================================================================
+
+model TranscriptionConfig {
+  id                    String              @id @default(cuid())
+
+  organizationId        String
+
+  provider              TranscriptionProvider
+  name                  String
+  enabled               Boolean             @default(true)
+  isDefault             Boolean             @default(false)
+
+  // Provider credentials (encrypted)
+  apiKey                String?
+  apiUrl                String?
+  model                 String?             // e.g., 'large-v3' for Whisper
+
+  // Default settings
+  language              String?             // ISO 639-1 code
+  autoDetectLanguage    Boolean             @default(true)
+  enableSpeakerDiarization Boolean          @default(false)
+  maxSpeakers           Int?
+  enablePunctuation     Boolean             @default(true)
+  enableProfanityFilter Boolean             @default(false)
+  customVocabulary      String[]            @default([])
+
+  // Webhook for completion notification
+  webhookUrl            String?
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  jobs                  TranscriptionJob[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+enum TranscriptionProvider {
+  WHISPER
+  ASSEMBLYAI
+  DEEPGRAM
+  AWS
+  GOOGLE
+}
+
+model TranscriptionJob {
+  id              String              @id @default(cuid())
+
+  organizationId  String
+
+  configId        String
+  config          TranscriptionConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  roomId          String?
+  recordingId     String?
+
+  sourceUrl       String?             // URL of audio file
+  sourceFilename  String?
+
+  status          TranscriptionJobStatus @default(PENDING)
+  progress        Int                 @default(0) // 0-100
+
+  // Results
+  provider        TranscriptionProvider
+  language        String?
+  detectedLanguage String?
+  duration        Float?              // Audio duration in seconds
+  wordCount       Int?
+  speakerCount    Int?
+  confidence      Float?              // 0.0-1.0
+
+  // Output files (stored paths)
+  resultText      String?             @db.Text
+  resultSrt       String?             @db.Text
+  resultVtt       String?             @db.Text
+  resultJson      Json?
+
+  error           String?
+
+  createdAt       DateTime            @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  @@index([organizationId])
+  @@index([configId])
+  @@index([status])
+}
+
+enum TranscriptionJobStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// =============================================================================
+// CLOUD STORAGE
+// =============================================================================
+
+model CloudStorageConfig {
+  id              String              @id @default(cuid())
+
+  organizationId  String
+
+  provider        CloudStorageProvider
+  name            String
+  enabled         Boolean             @default(true)
+  isDefault       Boolean             @default(false)
+
+  // Provider-specific config (encrypted sensitive fields)
+  bucket          String?             // S3 bucket / GCS bucket / Azure container
+  region          String?
+  endpoint        String?             // For S3-compatible services
+  accessKeyId     String?
+  secretAccessKey String?             // Encrypted
+  projectId       String?             // GCS
+  connectionString String?            // Azure
+  teamId          String?             // Frame.io
+  projectIdFrameio String?            // Frame.io project
+  accessToken     String?             // Frame.io (encrypted)
+  prefix          String?             // Path prefix
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  uploads         CloudUpload[]
+  retentionPolicy RetentionPolicy?
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+enum CloudStorageProvider {
+  S3
+  GCS
+  AZURE
+  FRAMEIO
+}
+
+model CloudUpload {
+  id              String              @id @default(cuid())
+
+  organizationId  String
+
+  configId        String
+  config          CloudStorageConfig  @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  roomId          String?
+  recordingId     String?
+
+  filename        String              // Storage filename
+  originalFilename String             // Original name
+  fileSize        BigInt
+  mimeType        String
+
+  status          CloudUploadStatus   @default(PENDING)
+  progress        Int                 @default(0) // 0-100
+  uploadedBytes   BigInt              @default(0)
+
+  remoteUrl       String?             // Final URL after upload
+  remotePath      String?             // Path in storage
+
+  error           String?
+
+  // Metadata for searchability
+  metadata        Json?               // CloudUploadMetadata
+
+  createdAt       DateTime            @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  @@index([organizationId])
+  @@index([configId])
+  @@index([status])
+}
+
+enum CloudUploadStatus {
+  PENDING
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model RetentionPolicy {
+  id              String              @id @default(cuid())
+
+  organizationId  String
+
+  configId        String              @unique
+  config          CloudStorageConfig  @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  name            String
+  enabled         Boolean             @default(true)
+  retentionDays   Int                 @default(30)
+  deleteAfterExpiry Boolean           @default(false)
+  archiveAfterDays Int?
+  archiveStorageClass String?         // GLACIER, COLDLINE, etc.
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([organizationId])
+}
+
+// =============================================================================
+// NDI BRIDGE
+// =============================================================================
+
+model NDIStream {
+  id              String              @id @default(cuid())
+
+  organizationId  String
+  roomId          String?
+
+  name            String
+  direction       NDIStreamDirection
+  enabled         Boolean             @default(true)
+  state           NDIConnectionState  @default(DISCONNECTED)
+
+  // For outputs (send direction)
+  sourceName      String?             // NDI source name on network
+  groups          String[]            @default([])
+  failoverSource  String?
+  lowBandwidth    Boolean             @default(false)
+
+  // For inputs (receive direction)
+  sourceUrl       String?             // NDI source URL to receive from
+
+  // Audio format
+  sampleRate      Int                 @default(48000)
+  channels        Int                 @default(2)
+  bitsPerSample   Int                 @default(24)
+
+  // Video format (optional)
+  videoWidth      Int?
+  videoHeight     Int?
+  videoFrameRate  Float?
+  videoProgressive Boolean            @default(true)
+
+  // Statistics
+  bytesTotal      BigInt              @default(0)
+  packetsDropped  BigInt              @default(0)
+
+  // Tally state
+  onProgram       Boolean             @default(false)
+  onPreview       Boolean             @default(false)
+
+  lastError       String?
+  connectedAt     DateTime?
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([roomId])
+}
+
+enum NDIStreamDirection {
+  SEND
+  RECEIVE
+}
+
+enum NDIConnectionState {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  RECONNECTING
+  ERROR
+}
+
+// ============================================================================
+// Pre-Flight Check
+// ============================================================================
+
+model PreflightReport {
+  id                String            @id @default(cuid())
+
+  roomId            String
+  room              CallRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  participantName   String
+
+  // Test results
+  allPassed         Boolean           @default(false)
+
+  browserPassed     Boolean           @default(false)
+  browserInfo       Json?             // User agent, WebRTC support, etc.
+
+  audioPassed       Boolean           @default(false)
+  audioInfo         Json?             // Device info, level test results
+
+  networkPassed     Boolean           @default(false)
+  networkInfo       Json?             // Latency, jitter, packet loss, bandwidth
+
+  createdAt         DateTime          @default(now())
+
+  @@index([roomId])
+  @@index([roomId, createdAt])
+}
+
+// =============================================================================
+// ANALYTICS - Connection quality and session metrics persistence
+// =============================================================================
+
+// Connection quality metrics per sample
+model ConnectionQualityMetric {
+  id                String            @id @default(cuid())
+
+  organizationId    String
+  roomId            String
+  participantId     String
+  participantName   String
+
+  // Quality metrics
+  rtt               Int               // Round-trip time in ms
+  jitter            Int               // Jitter in ms
+  packetLoss        Float             // Percentage 0-100
+  bandwidth         Int               // Estimated bandwidth in kbps
+  audioLevel        Float             // dB
+  qualityScore      Int               // 1-5 (poor to excellent)
+
+  timestamp         DateTime          @default(now())
+
+  @@index([organizationId])
+  @@index([roomId])
+  @@index([participantId])
+  @@index([timestamp])
+  @@index([roomId, timestamp])
+  @@index([participantId, timestamp])
+}
+
+// Session-level statistics
+model AnalyticsSession {
+  id                String            @id @default(cuid())
+
+  organizationId    String
+  roomId            String
+  roomName          String
+
+  startTime         DateTime
+  endTime           DateTime?
+  duration          Int               @default(0) // Seconds
+
+  participantCount  Int               @default(0)
+  peakParticipants  Int               @default(0)
+  totalAudioDuration Int              @default(0) // Seconds of audio processed
+  recordingsCount   Int               @default(0)
+  avgQualityScore   Float             @default(5)
+
+  issues            AnalyticsSessionIssue[]
+
+  @@index([organizationId])
+  @@index([roomId])
+  @@index([startTime])
+  @@index([organizationId, startTime])
+}
+
+// Issues/problems tracked during sessions
+model AnalyticsSessionIssue {
+  id                String            @id @default(cuid())
+
+  sessionId         String?
+  session           AnalyticsSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  organizationId    String
+  roomId            String?
+
+  type              SessionIssueType
+  participantId     String?
+  participantName   String?
+  description       String
+
+  duration          Int?              // Duration of issue in seconds
+  resolved          Boolean           @default(false)
+
+  timestamp         DateTime          @default(now())
+  resolvedAt        DateTime?
+
+  @@index([organizationId])
+  @@index([sessionId])
+  @@index([type])
+  @@index([timestamp])
+  @@index([resolved])
+}
+
+enum SessionIssueType {
+  CONNECTION_LOST
+  HIGH_LATENCY
+  PACKET_LOSS
+  AUDIO_DROPOUT
+  CODEC_ERROR
+}
+
+// Per-contributor aggregated statistics
+model ContributorStats {
+  id                String            @id @default(cuid())
+
+  organizationId    String
+  participantId     String            // External participant ID
+  participantName   String
+
+  sessionCount      Int               @default(0)
+  totalDuration     Int               @default(0) // Total time in sessions (seconds)
+  avgSessionDuration Float            @default(0)
+  avgQualityScore   Float             @default(5)
+  reliabilityScore  Int               @default(100) // 0-100
+  issueCount        Int               @default(0)
+
+  firstSeen         DateTime          @default(now())
+  lastActive        DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([organizationId, participantId])
+  @@index([organizationId])
+  @@index([reliabilityScore])
+  @@index([lastActive])
+}
+
+// Bandwidth statistics
+model BandwidthStats {
+  id                String            @id @default(cuid())
+
+  organizationId    String
+  roomId            String
+
+  ingressBps        BigInt            @default(0) // Bytes per second
+  egressBps         BigInt            @default(0)
+  peakIngressBps    BigInt            @default(0)
+  peakEgressBps     BigInt            @default(0)
+  totalBytesIn      BigInt            @default(0)
+  totalBytesOut     BigInt            @default(0)
+
+  timestamp         DateTime          @default(now())
+
+  @@index([organizationId])
+  @@index([roomId])
+  @@index([timestamp])
+  @@index([roomId, timestamp])
+}
+
+// =============================================================================
+// PROTOCOL GATEWAY - SRT/NDI/WebRTC protocol conversion
+// =============================================================================
+
+// Gateway configuration for protocol bridging
+model ProtocolGateway {
+  id                String            @id @default(cuid())
+
+  organizationId    String
+  name              String
+  type              GatewayType
+
+  status            GatewayStatus     @default(IDLE)
+  error             String?
+
+  // Input configuration stored as JSON
+  inputConfig       Json              // GatewayInput
+
+  // Quality adaptation settings
+  adaptationEnabled Boolean           @default(false)
+  minBitrate        Int?
+  maxBitrate        Int?
+  targetLatency     Int?
+  adaptiveFrameRate Boolean           @default(false)
+
+  startedAt         DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  outputs           GatewayOutput[]
+  statsHistory      GatewayStatsHistory[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([organizationId, status])
+}
+
+enum GatewayType {
+  SRT_TO_NDI
+  NDI_TO_SRT
+  WEBRTC_TO_SRT
+  SRT_TO_SRT        // Relay mode
+  SRT_FANOUT        // One to many
+}
+
+enum GatewayStatus {
+  IDLE
+  STARTING
+  RUNNING
+  ERROR
+  STOPPING
+}
+
+// Gateway output destination
+model GatewayOutput {
+  id                String            @id @default(cuid())
+
+  gatewayId         String
+  gateway           ProtocolGateway   @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
+
+  protocol          GatewayOutputProtocol
+  enabled           Boolean           @default(true)
+
+  // Output configuration stored as JSON
+  config            Json              // SRT/NDI/RTMP/Icecast specific config
+
+  // Status
+  connected         Boolean           @default(false)
+  bytesTransferred  BigInt            @default(0)
+  bitrate           Int               @default(0)
+  errorCount        Int               @default(0)
+  lastError         String?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([gatewayId])
+  @@index([enabled])
+}
+
+enum GatewayOutputProtocol {
+  SRT
+  NDI
+  RTMP
+  ICECAST
+}
+
+// Gateway statistics history for monitoring
+model GatewayStatsHistory {
+  id                String            @id @default(cuid())
+
+  gatewayId         String
+  gateway           ProtocolGateway   @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
+
+  inputBitrate      Int               @default(0)
+  outputBitrate     Int               @default(0)
+  latency           Int               @default(0)
+  packetLoss        Float             @default(0)
+  framesProcessed   BigInt            @default(0)
+  framesDropped     BigInt            @default(0)
+  uptime            Int               @default(0) // Seconds
+
+  timestamp         DateTime          @default(now())
+
+  @@index([gatewayId])
+  @@index([timestamp])
+  @@index([gatewayId, timestamp])
+}
+
+// =============================================================================
+// AUDIT LOGGING
+// =============================================================================
+
+// Audit log for tracking significant actions
+model AuditLog {
+  id              String          @id @default(cuid())
+
+  // Who performed the action
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Organization context (optional)
+  organizationId  String?
+  organization    Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  // What happened
+  action          AuditAction
+  resourceType    String          // "room", "user", "stream", etc.
+  resourceId      String?         // ID of the affected resource
+
+  // Additional context
+  details         Json?           // Action-specific details
+  ipAddress       String?         // Client IP address
+  userAgent       String?         // Client user agent
+
+  // Result
+  success         Boolean         @default(true)
+  errorMessage    String?
+
+  createdAt       DateTime        @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([createdAt])
+  @@index([organizationId, createdAt])
+}
+
+enum AuditAction {
+  // Authentication
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOGIN_FAILED
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+
+  // User management
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+
+  // Organization
+  ORG_CREATED
+  ORG_UPDATED
+  ORG_DELETED
+  ORG_MEMBER_ADDED
+  ORG_MEMBER_REMOVED
+  ORG_MEMBER_ROLE_CHANGED
+
+  // Room management
+  ROOM_CREATED
+  ROOM_UPDATED
+  ROOM_DELETED
+  ROOM_CLOSED
+
+  // Participant actions
+  PARTICIPANT_JOINED
+  PARTICIPANT_LEFT
+  PARTICIPANT_KICKED
+  PARTICIPANT_ADMITTED
+  PARTICIPANT_REJECTED
+
+  // Recording
+  RECORDING_STARTED
+  RECORDING_STOPPED
+
+  // Configuration changes
+  OUTPUT_CREATED
+  OUTPUT_UPDATED
+  OUTPUT_DELETED
+  OUTPUT_STARTED
+  OUTPUT_STOPPED
+
+  SOURCE_CREATED
+  SOURCE_UPDATED
+  SOURCE_DELETED
+
+  // Admin actions
+  ADMIN_ACTION
+}

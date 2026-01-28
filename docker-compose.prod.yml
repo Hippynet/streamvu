@@ -1,0 +1,112 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-streamvu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-streamvu}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-streamvu} -d ${POSTGRES_DB:-streamvu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - streamvu-internal
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.prod
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      API_HOST: 0.0.0.0
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-streamvu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-streamvu}
+
+      # Public URLs
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL is required}
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+
+      # Authentication
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-${FRONTEND_URL}}
+
+      # Google OAuth (optional)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-${PUBLIC_URL}/api/auth/google/callback}
+
+      # mediasoup WebRTC
+      MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required for WebRTC}
+      MEDIASOUP_MIN_PORT: ${MEDIASOUP_MIN_PORT:-40000}
+      MEDIASOUP_MAX_PORT: ${MEDIASOUP_MAX_PORT:-40100}
+
+      # TURN server (optional but recommended)
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_PASSWORD: ${TURN_PASSWORD:-}
+
+      # WHMCS (optional)
+      WHMCS_SECRET: ${WHMCS_SECRET:-}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: json
+
+      # Trusted proxies (for reverse proxy setups)
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+    ports:
+      - "${API_PORT:-3001}:3001"
+      # WebRTC media ports
+      - "${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}:${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}/udp"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - streamvu-internal
+      - streamvu-external
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL:-${PUBLIC_URL}}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+        VITE_APP_VERSION: ${APP_VERSION:-1.0.0}
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - streamvu-external
+
+  # Optional: TURN server for WebRTC NAT traversal
+  # Uncomment if you don't have an external TURN server
+  # coturn:
+  #   image: coturn/coturn:latest
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   volumes:
+  #     - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+  #   command: ["-c", "/etc/coturn/turnserver.conf"]
+
+volumes:
+  postgres_data:
+
+networks:
+  streamvu-internal:
+    internal: true
+  streamvu-external:

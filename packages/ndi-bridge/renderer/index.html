@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <title>StreamVU NDI Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      min-height: 100vh;
+    }
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #111;
+      border-bottom: 1px solid #222;
+    }
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header h1 .logo {
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 4px;
+    }
+    .header .status {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #1a1a1a;
+      color: #666;
+    }
+    .header .status.active { background: #052e16; color: #22c55e; }
+    .main { flex: 1; padding: 16px; }
+    .section {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #222;
+    }
+    .section-header h2 {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #888;
+    }
+    .section-content { padding: 16px; }
+    .stream-list { display: flex; flex-direction: column; gap: 8px; }
+    .stream-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #0a0a0a;
+      border: 1px solid #222;
+      border-radius: 6px;
+    }
+    .stream-item .indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #333;
+    }
+    .stream-item .indicator.active { background: #22c55e; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .stream-item .info { flex: 1; }
+    .stream-item .name { font-size: 13px; font-weight: 500; }
+    .stream-item .details { font-size: 11px; color: #666; margin-top: 2px; }
+    .stream-item .actions { display: flex; gap: 8px; }
+    .btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-secondary { background: #222; color: #888; }
+    .btn-secondary:hover { background: #333; color: #fff; }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+    .empty-state p { font-size: 13px; margin-bottom: 16px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; }
+    .form-group input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #fff;
+    }
+    .form-group input:focus { outline: none; border-color: #3b82f6; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow: auto;
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border-bottom: 1px solid #222;
+    }
+    .modal-header h3 { font-size: 14px; font-weight: 600; }
+    .modal-body { padding: 16px; }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 16px;
+      border-top: 1px solid #222;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .stat-card {
+      background: #0a0a0a;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+    }
+    .stat-card .value { font-size: 20px; font-weight: 600; color: #3b82f6; }
+    .stat-card .label { font-size: 10px; color: #666; margin-top: 4px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>
+        <div class="logo"></div>
+        StreamVU NDI Bridge
+      </h1>
+      <span class="status" id="globalStatus">Idle</span>
+    </header>
+
+    <main class="main">
+      <div class="section">
+        <div class="section-header">
+          <h2>Overview</h2>
+        </div>
+        <div class="section-content">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="value" id="statStreams">0</div>
+              <div class="label">Active Streams</div>
+            </div>
+            <div class="stat-card">
+              <div class="value" id="statFrames">0</div>
+              <div class="label">Frames/sec</div>
+            </div>
+            <div class="stat-card">
+              <div class="value" id="statBandwidth">0</div>
+              <div class="label">Mbps In</div>
+            </div>
+            <div class="stat-card">
+              <div class="value" id="statLatency">0</div>
+              <div class="label">Latency (ms)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <h2>NDI Outputs</h2>
+          <button class="btn btn-primary" id="addStreamBtn">+ Add Stream</button>
+        </div>
+        <div class="section-content">
+          <div class="stream-list" id="streamList">
+            <div class="empty-state" id="emptyState">
+              <p>No streams configured yet.</p>
+              <button class="btn btn-primary" id="addFirstStreamBtn">Add Your First Stream</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="addStreamModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Add NDI Output</h3>
+        <button class="btn btn-secondary" id="closeModalBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Stream Name</label>
+          <input type="text" id="streamName" placeholder="e.g., Studio A - Camera 1">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Server URL</label>
+            <input type="text" id="serverUrl" placeholder="https://streamvu.example.com">
+          </div>
+          <div class="form-group">
+            <label>Room ID</label>
+            <input type="text" id="roomId" placeholder="room-123">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>NDI Output Name</label>
+          <input type="text" id="ndiOutputName" placeholder="StreamVU - Studio A">
+        </div>
+        <div class="form-group">
+          <label>Participant ID (Optional)</label>
+          <input type="text" id="participantId" placeholder="Leave empty for all participants">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelAddBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveStreamBtn">Add Stream</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Use safe DOM manipulation instead of innerHTML
+    function createStreamElement(stream) {
+      const item = document.createElement('div');
+      item.className = 'stream-item';
+      item.dataset.id = stream.id;
+
+      const indicator = document.createElement('div');
+      indicator.className = 'indicator' + (stream.isActive ? ' active' : '');
+      item.appendChild(indicator);
+
+      const info = document.createElement('div');
+      info.className = 'info';
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = stream.name;
+      info.appendChild(name);
+
+      const details = document.createElement('div');
+      details.className = 'details';
+      details.textContent = stream.serverUrl + ' → ' + stream.ndiOutputName;
+      info.appendChild(details);
+
+      item.appendChild(info);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      if (stream.isActive) {
+        const stopBtn = document.createElement('button');
+        stopBtn.className = 'btn btn-danger';
+        stopBtn.textContent = 'Stop';
+        stopBtn.onclick = () => stopStream(stream.id);
+        actions.appendChild(stopBtn);
+      } else {
+        const startBtn = document.createElement('button');
+        startBtn.className = 'btn btn-primary';
+        startBtn.textContent = 'Start';
+        startBtn.onclick = () => startStream(stream.id);
+        actions.appendChild(startBtn);
+      }
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn btn-secondary';
+      removeBtn.textContent = 'Remove';
+      removeBtn.onclick = () => removeStream(stream.id);
+      actions.appendChild(removeBtn);
+
+      item.appendChild(actions);
+      return item;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const streamList = document.getElementById('streamList');
+      const emptyState = document.getElementById('emptyState');
+      const addStreamModal = document.getElementById('addStreamModal');
+
+      async function loadStreams() {
+        if (!window.ndiBridge) {
+          console.log('NDI Bridge API not available (running in browser)');
+          return;
+        }
+
+        const streams = await window.ndiBridge.streams.list();
+        renderStreams(streams);
+        updateGlobalStatus(streams);
+      }
+
+      function renderStreams(streams) {
+        // Clear existing stream items (but keep empty state)
+        const existingItems = streamList.querySelectorAll('.stream-item');
+        existingItems.forEach(item => item.remove());
+
+        if (streams.length === 0) {
+          emptyState.style.display = 'block';
+          return;
+        }
+
+        emptyState.style.display = 'none';
+        streams.forEach(stream => {
+          streamList.appendChild(createStreamElement(stream));
+        });
+      }
+
+      function updateGlobalStatus(streams) {
+        const status = document.getElementById('globalStatus');
+        const activeCount = streams.filter(s => s.isActive).length;
+
+        if (activeCount > 0) {
+          status.textContent = activeCount + ' Active';
+          status.classList.add('active');
+        } else {
+          status.textContent = 'Idle';
+          status.classList.remove('active');
+        }
+
+        document.getElementById('statStreams').textContent = activeCount;
+      }
+
+      // Modal handlers
+      document.getElementById('addStreamBtn').onclick = () => addStreamModal.classList.add('active');
+      document.getElementById('addFirstStreamBtn').onclick = () => addStreamModal.classList.add('active');
+      document.getElementById('closeModalBtn').onclick = () => addStreamModal.classList.remove('active');
+      document.getElementById('cancelAddBtn').onclick = () => addStreamModal.classList.remove('active');
+
+      document.getElementById('saveStreamBtn').onclick = async () => {
+        if (!window.ndiBridge) return;
+
+        const config = {
+          name: document.getElementById('streamName').value,
+          serverUrl: document.getElementById('serverUrl').value,
+          roomId: document.getElementById('roomId').value,
+          ndiOutputName: document.getElementById('ndiOutputName').value,
+          participantId: document.getElementById('participantId').value || undefined,
+        };
+
+        await window.ndiBridge.streams.add(config);
+        addStreamModal.classList.remove('active');
+        loadStreams();
+      };
+
+      // Stream actions
+      window.startStream = async (id) => {
+        if (!window.ndiBridge) return;
+        await window.ndiBridge.streams.start(id);
+        loadStreams();
+      };
+
+      window.stopStream = async (id) => {
+        if (!window.ndiBridge) return;
+        await window.ndiBridge.streams.stop(id);
+        loadStreams();
+      };
+
+      window.removeStream = async (id) => {
+        if (!window.ndiBridge) return;
+        await window.ndiBridge.streams.remove(id);
+        loadStreams();
+      };
+
+      if (window.ndiBridge) {
+        window.ndiBridge.on('stream:status', () => loadStreams());
+      }
+
+      loadStreams();
+    });
+  </script>
+</body>
+</html>

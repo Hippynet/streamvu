@@ -1,0 +1,39 @@
+{
+  "name": "hippynet-stream-vu-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant Icecast stream monitoring dashboard with VU meters and WebRTC call center",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,js,jsx,json,css}\"",
+    "format:check": "prettier --check \"packages/**/*.{ts,tsx,js,jsx,json,css}\"",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "test:watch": "pnpm -r --parallel run test:watch",
+    "test:coverage": "pnpm -r run test:coverage",
+    "db:generate": "pnpm --filter @streamvu/api run db:generate",
+    "db:migrate": "pnpm --filter @streamvu/api run db:migrate",
+    "db:seed": "pnpm --filter @streamvu/api run db:seed",
+    "docker:dev": "docker-compose up",
+    "docker:build": "docker-compose build",
+    "clean": "pnpm -r run clean && rm -rf node_modules",
+    "check": "pnpm lint && pnpm typecheck && pnpm build",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.8.0",
+    "prettier-plugin-tailwindcss": "^0.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
