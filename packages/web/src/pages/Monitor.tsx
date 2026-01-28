@@ -25,6 +25,7 @@ type GridColumns = 'auto' | 1 | 2 | 3 | 4 | 5 | 6
 
 const GRID_COLUMNS_KEY = 'streamvu-grid-columns'
 const STREAM_ORDER_KEY = 'streamvu-stream-order'
+const HIPPYNET_PROMO_KEY = 'streamvu-hippynet-promo'
 
 function generateId(): string {
   return `stream_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
@@ -46,7 +47,6 @@ export default function Monitor() {
     if (num >= 1 && num <= 6) return num as GridColumns
     return 'auto'
   })
-  const hasAutoStarted = useRef(false)
 
   // Recording state
   const [recordings, setRecordings] = useState<
@@ -72,6 +72,19 @@ export default function Monitor() {
   const [importError, setImportError] = useState<string | null>(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Hippynet promo banner state
+  const [promoExpanded, setPromoExpanded] = useState(() => {
+    const saved = localStorage.getItem(HIPPYNET_PROMO_KEY)
+    return saved !== 'collapsed'
+  })
+  const togglePromo = useCallback(() => {
+    setPromoExpanded((prev) => {
+      const newValue = !prev
+      localStorage.setItem(HIPPYNET_PROMO_KEY, newValue ? 'expanded' : 'collapsed')
+      return newValue
+    })
+  }, [])
 
   // Clock
   const [time, setTime] = useState(new Date())
@@ -270,17 +283,6 @@ export default function Monitor() {
     const streamConfigs = onlineStreams.map((s) => ({ id: s.id, url: s.url }))
     startMonitoring(streamConfigs)
   }, [onlineStreams, startMonitoring])
-
-  // Auto-start monitoring
-  useEffect(() => {
-    if (!hasAutoStarted.current && onlineStreams.length > 0 && !isMonitoring) {
-      hasAutoStarted.current = true
-      const timer = setTimeout(() => {
-        handleStartMonitoring()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [onlineStreams.length, isMonitoring, handleStartMonitoring])
 
   // Handle drag end
   const handleDragEnd = useCallback(
@@ -647,7 +649,8 @@ export default function Monitor() {
           <SortableContext items={allOrderedStreams.map((s) => s.id)} strategy={rectSortingStrategy}>
             <div className={`grid ${gridClass} auto-rows-fr gap-4`}>
               {allOrderedStreams.map((stream) => {
-                const isOnline = stream.latestHealth?.isOnline ?? false
+                // Treat streams without health data as potentially online (unknown status)
+                const isOnline = stream.latestHealth === null || stream.latestHealth?.isOnline === true
                 const levels = getLevels(stream.id)
                 return (
                   <MCRStreamTile
@@ -680,6 +683,106 @@ export default function Monitor() {
         isExpanded={recordingsPanelExpanded}
         onToggleExpanded={() => setRecordingsPanelExpanded(!recordingsPanelExpanded)}
       />
+
+      {/* Hippynet promo banner */}
+      <div className="border-t border-blue-900/30 bg-gradient-to-r from-[#0B1C8C]/20 via-[#1E6BFF]/10 to-[#0B1C8C]/20">
+        <button
+          onClick={togglePromo}
+          className="flex w-full items-center justify-between px-4 py-2 text-left transition-colors hover:bg-blue-900/20"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-[#1E6BFF]">Powered by</span>
+            <span className="font-bold text-white">Hippynet</span>
+            <span className="hidden text-xs text-gray-500 sm:inline">• Broadcast infrastructure that just works</span>
+          </div>
+          <svg
+            className={`h-4 w-4 text-gray-500 transition-transform ${promoExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
+
+        {promoExpanded && (
+          <div className="border-t border-blue-900/20 px-4 py-4">
+            <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-3">
+              {/* Stream Hosting */}
+              <a
+                href="https://hippynet.co.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border border-blue-900/30 bg-gray-900/50 p-3 transition-all hover:border-[#1E6BFF]/50 hover:bg-gray-900"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-[#1E6BFF]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008V18m0-12h.008v.008h-.008V6m0 3h.008v.008h-.008V9z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-white">Stream Hosting</span>
+                </div>
+                <p className="text-xs text-gray-400 group-hover:text-gray-300">
+                  Reliable Icecast & Shoutcast hosting with 99.9% uptime guarantee
+                </p>
+              </a>
+
+              {/* Audio Toolbox */}
+              <a
+                href="https://hippynet.co.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border border-blue-900/30 bg-gray-900/50 p-3 transition-all hover:border-[#1E6BFF]/50 hover:bg-gray-900"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-[#FFD319]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                  </svg>
+                  <span className="text-sm font-semibold text-white">Audio Toolbox</span>
+                </div>
+                <p className="text-xs text-gray-400 group-hover:text-gray-300">
+                  Professional audio processing, compression & silence detection
+                </p>
+              </a>
+
+              {/* Listen Again */}
+              <a
+                href="https://hippynet.co.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group rounded-lg border border-blue-900/30 bg-gray-900/50 p-3 transition-all hover:border-[#1E6BFF]/50 hover:bg-gray-900"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <svg className="h-4 w-4 text-[#1E6BFF]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" />
+                  </svg>
+                  <span className="text-sm font-semibold text-white">Listen Again</span>
+                </div>
+                <p className="text-xs text-gray-400 group-hover:text-gray-300">
+                  Automatic catch-up podcasts & on-demand show archives
+                </p>
+              </a>
+            </div>
+
+            <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
+              <span>99.9% Uptime</span>
+              <span className="text-gray-700">•</span>
+              <span>15+ Years Experience</span>
+              <span className="text-gray-700">•</span>
+              <span>200+ Stations</span>
+              <span className="text-gray-700">•</span>
+              <a
+                href="https://hippynet.co.uk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#1E6BFF] transition-colors hover:text-[#4D8AFF]"
+              >
+                hippynet.co.uk
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Footer */}
       <footer className="border-t border-gray-800 bg-black px-4 py-2">
