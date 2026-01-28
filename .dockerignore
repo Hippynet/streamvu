@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+
+# Node modules (will be installed in container)
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+.next
+**/.next
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test files
+coverage
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Documentation
+*.md
+!packages/web/sample-config.json
+
+# API package (not needed for standalone)
+packages/api
+
+# Docker files for other builds
+docker-compose.yml
+docker-compose.prod.yml
+
+# Misc
+.claude
+**/.claude
+*.tgz

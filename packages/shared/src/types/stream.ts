@@ -3,7 +3,6 @@ export interface Stream {
   name: string
   url: string
   mountPoint: string | null
-  organizationId: string
   displayOrder: number
   isVisible: boolean
   createdAt: string

@@ -1,19 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { useAuthStore } from '../../stores/authStore'
-import OrgSwitcher from '../organizations/OrgSwitcher'
-import { HippynetPromo } from '../promotions/HippynetPromo'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: DashboardIcon },
+  { name: 'Monitor', href: '/', icon: MonitorIcon },
   { name: 'Streams', href: '/streams', icon: StreamsIcon },
-  // Call Center hidden for initial StreamVU release - can be re-enabled later
-  // { name: 'Call Center', href: '/call-center', icon: CallCenterIcon },
   { name: 'Settings', href: '/settings', icon: SettingsIcon },
 ]
 
-const adminNavigation = [{ name: 'Accounts', href: '/admin/accounts', icon: AccountsIcon }]
-
-function DashboardIcon({ className }: { className?: string }) {
+function MonitorIcon({ className }: { className?: string }) {
   return (
     <svg
       className={className}
@@ -25,7 +18,7 @@ function DashboardIcon({ className }: { className?: string }) {
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
-        d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
+        d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605"
       />
     </svg>
   )
@@ -44,24 +37,6 @@ function StreamsIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-      />
-    </svg>
-  )
-}
-
-function CallCenterIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"
       />
     </svg>
   )
@@ -86,36 +61,13 @@ function SettingsIcon({ className }: { className?: string }) {
   )
 }
 
-function AccountsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
-      />
-    </svg>
-  )
-}
-
 export default function Sidebar() {
-  const user = useAuthStore((state) => state.user)
-  const isSuperAdmin = user?.globalRole === 'SUPER_ADMIN'
-
   return (
     <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
       <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-700 bg-gray-800 px-6 pb-4">
         <div className="flex h-16 shrink-0 items-center">
           <span className="text-2xl font-bold text-primary-500">StreamVU</span>
         </div>
-
-        <OrgSwitcher />
 
         <nav className="flex flex-1 flex-col">
           <ul role="list" className="flex flex-1 flex-col gap-y-7">
@@ -142,36 +94,12 @@ export default function Sidebar() {
               </ul>
             </li>
 
-            {isSuperAdmin && (
-              <li>
-                <div className="text-xs font-semibold uppercase leading-6 tracking-wider text-gray-500">
-                  Administration
-                </div>
-                <ul role="list" className="-mx-2 mt-2 space-y-1">
-                  {adminNavigation.map((item) => (
-                    <li key={item.name}>
-                      <NavLink
-                        to={item.href}
-                        className={({ isActive }) =>
-                          `group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 transition-colors ${
-                            isActive
-                              ? 'bg-gray-700 text-white'
-                              : 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                          }`
-                        }
-                      >
-                        <item.icon className="h-6 w-6 shrink-0" />
-                        {item.name}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            )}
-
-            {/* Hippynet Promo - pushes to bottom */}
+            {/* Version info at bottom */}
             <li className="mt-auto">
-              <HippynetPromo variant="sidebar" />
+              <div className="rounded-lg bg-gray-900/50 p-3 text-center">
+                <p className="text-xs text-gray-500">StreamVU Monitor</p>
+                <p className="text-xs text-gray-600">Static Edition</p>
+              </div>
             </li>
           </ul>
         </nav>

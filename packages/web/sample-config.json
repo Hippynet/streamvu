@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "exportedAt": "2024-01-28T00:00:00.000Z",
+  "streams": [
+    {
+      "id": "stream_somafm_dronezone",
+      "name": "SomaFM Drone Zone",
+      "url": "https://ice2.somafm.com/dronezone-256-mp3",
+      "mountPoint": "/dronezone",
+      "displayOrder": 0,
+      "isVisible": true
+    },
+    {
+      "id": "stream_somafm_groovesalad",
+      "name": "SomaFM Groove Salad",
+      "url": "https://ice2.somafm.com/groovesalad-256-mp3",
+      "mountPoint": "/groovesalad",
+      "displayOrder": 1,
+      "isVisible": true
+    },
+    {
+      "id": "stream_somafm_defcon",
+      "name": "SomaFM DEF CON",
+      "url": "https://ice2.somafm.com/defcon-256-mp3",
+      "mountPoint": "/defcon",
+      "displayOrder": 2,
+      "isVisible": true
+    },
+    {
+      "id": "stream_somafm_secretagent",
+      "name": "SomaFM Secret Agent",
+      "url": "https://ice2.somafm.com/secretagent-256-mp3",
+      "mountPoint": "/secretagent",
+      "displayOrder": 3,
+      "isVisible": true
+    },
+    {
+      "id": "stream_radiode_techno",
+      "name": "Radio.de Technobase",
+      "url": "https://listen.technobase.fm/tunein-mp3-pls",
+      "mountPoint": "/technobase",
+      "displayOrder": 4,
+      "isVisible": true
+    },
+    {
+      "id": "stream_jazzradio",
+      "name": "Jazz Radio",
+      "url": "https://jazz-wr01.ice.infomaniak.ch/jazz-wr01-128.mp3",
+      "mountPoint": "/jazz",
+      "displayOrder": 5,
+      "isVisible": true
+    }
+  ]
+}

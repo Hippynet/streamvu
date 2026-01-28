@@ -10,6 +10,7 @@ export * from './types/webhook.js'
 export * from './types/cloudStorage.js'
 export * from './types/transcription.js'
 export * from './types/ndi.js'
+export * from './types/configExport.js'
 
 // Constants
 export * from './constants.js'

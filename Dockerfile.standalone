@@ -1,0 +1,46 @@
+# StreamVU Static Edition - Production Dockerfile
+# Builds the static frontend and serves via nginx
+
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files and configs
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
+COPY packages/web/package.json packages/web/tsconfig.json ./packages/web/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source files
+COPY packages/shared ./packages/shared
+COPY packages/web ./packages/web
+
+# Build shared package first
+WORKDIR /app/packages/shared
+RUN pnpm build
+
+# Build web package (vite only, skip tsc for standalone)
+WORKDIR /app/packages/web
+RUN pnpm vite build
+
+# Stage 2: Production nginx
+FROM nginx:alpine
+
+# Copy custom nginx config for SPA routing
+COPY nginx.standalone.conf /etc/nginx/conf.d/default.conf
+
+# Copy built static files
+COPY --from=builder /app/packages/web/dist /usr/share/nginx/html
+
+# Copy sample config for reference
+COPY packages/web/sample-config.json /usr/share/nginx/html/sample-config.json
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

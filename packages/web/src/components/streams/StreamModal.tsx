@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import type { CreateStreamRequest, StreamWithHealth } from '@streamvu/shared'
-import { ApiError } from '../../services/api'
 
 interface StreamModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: CreateStreamRequest) => Promise<void>
+  onSubmit: (data: CreateStreamRequest) => void | Promise<void>
   stream?: StreamWithHealth | null // If provided, we're editing
 }
 
@@ -52,7 +51,7 @@ export default function StreamModal({ isOpen, onClose, onSubmit, stream }: Strea
       }
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : `Failed to ${isEditing ? 'update' : 'add'} stream`
+        err instanceof Error ? err.message : `Failed to ${isEditing ? 'update' : 'add'} stream`
       )
     } finally {
       setLoading(false)
