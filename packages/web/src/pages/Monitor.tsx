@@ -481,14 +481,28 @@ export default function Monitor() {
   }, [gridRows])
 
   // Calculate row height style based on viewport
-  // Account for header (~64px), control bar (~48px), footer areas (~200px estimated)
+  // Chrome heights: header(64) + control bar(48) + warning(~60 if shown) + footer(40) + promo(~48 collapsed, ~200 expanded)
   const gridRowStyle = useMemo(() => {
-    const chromeHeight = zenMode ? 0 : 280 // Approximate chrome height
+    if (zenMode) {
+      return {
+        gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+        height: '100vh',
+      }
+    }
+    // Base chrome: header + control bar + footer minimum
+    // header: 64px, control bar: ~52px, footer: ~36px, promo collapsed: ~44px = ~196px
+    // Add buffer for warning banner when not monitoring: +60px
+    // When promo expanded: add ~160px more
+    const baseChrome = 200 // Minimum chrome
+    const warningHeight = !isMonitoring && streams.length > 0 ? 60 : 0
+    const promoHeight = promoExpanded ? 180 : 44
+    const totalChrome = baseChrome + warningHeight + promoHeight
+
     return {
       gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
-      height: zenMode ? '100vh' : `calc(100vh - ${chromeHeight}px)`,
+      height: `calc(100vh - ${totalChrome}px)`,
     }
-  }, [gridRows, zenMode])
+  }, [gridRows, zenMode, isMonitoring, streams.length, promoExpanded])
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })

@@ -27,10 +27,10 @@
       "isVisible": true
     },
     {
-      "id": "stream_somafm_secretagent",
-      "name": "SomaFM Secret Agent",
-      "url": "https://ice2.somafm.com/secretagent-256-mp3",
-      "mountPoint": "/secretagent",
+      "id": "stream_somafm_spacestation",
+      "name": "SomaFM Space Station",
+      "url": "https://ice2.somafm.com/spacestation-256-mp3",
+      "mountPoint": "/spacestation",
       "displayOrder": 3,
       "isVisible": true
     },

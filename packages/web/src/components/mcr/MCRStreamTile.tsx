@@ -194,9 +194,9 @@ const MCRStreamTile = memo(function MCRStreamTile({
     const peakSegment = levelToSegment(peakLevel)
 
     return (
-      <div className="flex-1">
+      <div className="flex flex-1 flex-col">
         <div className="mb-1 text-center font-mono text-[9px] font-medium text-gray-400">{channel}</div>
-        <div className="relative flex-1 overflow-hidden rounded-lg border border-gray-700/50 bg-black/60">
+        <div className="relative min-h-[100px] flex-1 overflow-hidden rounded-lg border border-gray-700/50 bg-black/60">
           <div className="absolute inset-0 flex flex-col-reverse p-1">
             {Array.from({ length: segments }).map((_, i) => {
               const isActive = i < activeSegment
@@ -244,7 +244,7 @@ const MCRStreamTile = memo(function MCRStreamTile({
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative flex flex-col overflow-hidden rounded-xl border bg-gray-900/80 shadow-lg transition-all ${
+      className={`relative flex h-full flex-col overflow-hidden rounded-xl border bg-gray-900/80 shadow-lg transition-all ${
         !isOnline
           ? 'border-red-900/60'
           : isSilenceAlarm
