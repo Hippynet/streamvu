@@ -7,6 +7,8 @@ export interface Stream {
   isVisible: boolean
   createdAt: string
   updatedAt: string
+  // Optional for backward compatibility with API
+  organizationId?: string
 }
 
 export interface StreamHealthCheck {

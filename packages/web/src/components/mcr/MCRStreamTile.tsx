@@ -18,7 +18,6 @@ interface MCRStreamTileProps {
   onStopRecording?: () => void
   volume?: number
   onVolumeChange?: (volume: number) => void
-  tileSize?: 'S' | 'M' | 'L'
 }
 
 const MCRStreamTile = memo(function MCRStreamTile({
@@ -36,7 +35,6 @@ const MCRStreamTile = memo(function MCRStreamTile({
   onStopRecording,
   volume = 1,
   onVolumeChange,
-  tileSize = 'M',
 }: MCRStreamTileProps) {
   const [silenceSeconds, setSilenceSeconds] = useState(0)
   const peakLeftRef = useRef(0)

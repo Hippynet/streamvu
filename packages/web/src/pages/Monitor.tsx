@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useStreamStore } from '../stores/streamStore'
 import { useStreamMonitor } from '../hooks/useStreamMonitor'
 import MCRStreamTile from '../components/mcr/MCRStreamTile'
-import RecordingsPanel from '../components/mcr/RecordingsPanel'
 import type { StreamVUConfig } from '@streamvu/shared'
 import {
   DndContext,
@@ -62,11 +61,7 @@ export default function Monitor() {
   }
 
   // Recording state
-  const [recordings, setRecordings] = useState<
-    Map<string, { url: string; timestamp: Date; duration: number; streamName?: string }>
-  >(new Map())
   const [recordingStreams, setRecordingStreams] = useState<Set<string>>(new Set())
-  const [recordingsPanelExpanded, setRecordingsPanelExpanded] = useState(true)
   const mediaRecordersRef = useRef<
     Map<
       string,
@@ -74,8 +69,9 @@ export default function Monitor() {
         recorder: MediaRecorder
         chunks: Blob[]
         startTime: number
-        audio?: HTMLAudioElement
-        audioContext?: AudioContext
+        streamName: string
+        audio: HTMLAudioElement
+        audioContext: AudioContext
       }
     >
   >(new Map())
@@ -360,20 +356,19 @@ export default function Monitor() {
           recordAudio.src = ''
           audioContext.close()
 
+          // Auto-download the recording
           const blob = new Blob(chunks, { type: 'audio/webm' })
           const url = URL.createObjectURL(blob)
-          const duration = Math.floor((Date.now() - startTime) / 1000)
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+          const safeName = stream.name.replace(/[^a-zA-Z0-9]/g, '_')
 
-          setRecordings((prev) => {
-            const updated = new Map(prev)
-            updated.set(`${stream.id}-${Date.now()}`, {
-              url,
-              timestamp: new Date(),
-              duration,
-              streamName: stream.name,
-            })
-            return updated
-          })
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${safeName}_${timestamp}.webm`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
 
           setRecordingStreams((prev) => {
             const updated = new Set(prev)
@@ -386,6 +381,7 @@ export default function Monitor() {
           recorder: mediaRecorder,
           chunks,
           startTime,
+          streamName: stream.name,
           audio: recordAudio,
           audioContext,
         })
@@ -407,6 +403,11 @@ export default function Monitor() {
         recorderData.audio?.pause()
         if (recorderData.audio) recorderData.audio.src = ''
         recorderData.audioContext?.close()
+        setRecordingStreams((prev) => {
+          const updated = new Set(prev)
+          updated.delete(streamId)
+          return updated
+        })
       }
       mediaRecordersRef.current.delete(streamId)
     }
@@ -430,20 +431,6 @@ export default function Monitor() {
     setShowClearConfirm(false)
   }, [isMonitoring, stopMonitoring, recordingStreams, stopRecording, setStreams])
 
-  const deleteRecording = useCallback((key: string) => {
-    setRecordings((prev) => {
-      const updated = new Map(prev)
-      const recording = updated.get(key)
-      if (recording) URL.revokeObjectURL(recording.url)
-      updated.delete(key)
-      return updated
-    })
-  }, [])
-
-  const clearAllRecordings = useCallback(() => {
-    recordings.forEach((rec) => URL.revokeObjectURL(rec.url))
-    setRecordings(new Map())
-  }, [recordings])
 
   // Calculate grid columns
   const gridClass = useMemo(() => {
@@ -470,32 +457,20 @@ export default function Monitor() {
     return [...onlineStreams, ...offlineStreams]
   }, [onlineStreams, offlineStreams])
 
-  // Map grid rows to tile size for the component
-  const tileSize = useMemo(() => {
-    switch (gridRows) {
-      case 1: return 'L' as const
-      case 2: return 'M' as const
-      case 3: return 'S' as const
-      default: return 'M' as const
-    }
-  }, [gridRows])
-
   // Calculate row height style based on viewport
-  // Chrome heights: header(64) + control bar(48) + warning(~60 if shown) + footer(40) + promo(~48 collapsed, ~200 expanded)
+  // Chrome heights: header(64) + control bar(48) + footer(36) + main padding(16) = 164px base
   const gridRowStyle = useMemo(() => {
     if (zenMode) {
+      // In zen mode: just control bar(48) + main padding(16) = 64px
       return {
         gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
-        height: '100vh',
+        height: 'calc(100vh - 64px)',
       }
     }
-    // Base chrome: header + control bar + footer minimum
-    // header: 64px, control bar: ~52px, footer: ~36px, promo collapsed: ~44px = ~196px
-    // Add buffer for warning banner when not monitoring: +60px
-    // When promo expanded: add ~160px more
-    const baseChrome = 200 // Minimum chrome
-    const warningHeight = !isMonitoring && streams.length > 0 ? 60 : 0
-    const promoHeight = promoExpanded ? 180 : 44
+    // Base chrome: header(64) + control bar(48) + footer(36) + main padding(16)
+    const baseChrome = 164
+    const warningHeight = !isMonitoring && streams.length > 0 ? 56 : 0
+    const promoHeight = promoExpanded ? 176 : 40
     const totalChrome = baseChrome + warningHeight + promoHeight
 
     return {
@@ -583,23 +558,163 @@ export default function Monitor() {
     )
   }
 
+  // Zen mode renders as a full-screen fixed overlay
+  if (zenMode) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-950">
+        {/* Zen mode control bar */}
+        <div className="flex items-center justify-between border-b border-gray-800 bg-black px-4 py-2">
+          <div className="flex items-center gap-6">
+            {/* Status indicators */}
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-3 rounded-full bg-green-500" />
+              <span className="text-sm text-gray-300">
+                <span className="font-bold text-white">{onlineStreams.length}</span> Online
+              </span>
+            </div>
+            {offlineStreams.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+                <span className="text-sm text-red-400">
+                  <span className="font-bold">{offlineStreams.length}</span> Offline
+                </span>
+              </div>
+            )}
+            {silenceStreams.size > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 animate-pulse rounded-full bg-yellow-500" />
+                <span className="text-sm text-yellow-400">
+                  <span className="font-bold">{silenceStreams.size}</span> Silence
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Grid layout selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-gray-500">Grid</span>
+              <div className="flex items-center rounded border border-gray-700 bg-gray-900">
+                {(['auto', 1, 2, 3, 4, 5, 6] as GridColumns[]).map((cols) => (
+                  <button
+                    key={cols}
+                    onClick={() => handleGridColumnsChange(cols)}
+                    className={`px-2 py-1 font-mono text-xs transition-colors ${
+                      gridColumns === cols
+                        ? 'bg-primary-600 text-white'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    {cols === 'auto' ? 'A' : cols}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Row selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-gray-500">Rows</span>
+              <div className="flex items-center rounded border border-gray-700 bg-gray-900">
+                {([1, 2, 3] as GridRows[]).map((rows) => (
+                  <button
+                    key={rows}
+                    onClick={() => handleGridRowsChange(rows)}
+                    className={`px-2 py-1 font-mono text-xs transition-colors ${
+                      gridRows === rows
+                        ? 'bg-primary-600 text-white'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    }`}
+                    title={`${rows} row${rows > 1 ? 's' : ''} visible`}
+                  >
+                    {rows}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Monitor control */}
+            {isMonitoring ? (
+              <button
+                onClick={stopMonitoring}
+                className="flex items-center gap-2 rounded border border-red-700 bg-red-900/50 px-4 py-2 text-red-400 transition-colors hover:bg-red-900"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                <span className="text-sm font-medium">STOP</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleStartMonitoring}
+                disabled={onlineStreams.length === 0}
+                className="flex items-center gap-2 rounded border border-green-700 bg-green-900/50 px-4 py-2 text-green-400 transition-colors hover:bg-green-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                <span className="text-sm font-medium">MONITOR</span>
+              </button>
+            )}
+
+            {/* Clock */}
+            <div className="font-mono text-xl font-bold tracking-wider text-white">
+              {formatTime(time)}
+            </div>
+
+            {/* Exit zen mode */}
+            <button
+              onClick={() => setZenMode(false)}
+              className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              title="Exit zen mode"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Stream tiles - zen mode */}
+        <main className="flex-1 overflow-hidden p-2">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={allOrderedStreams.map((s) => s.id)} strategy={rectSortingStrategy}>
+              <div
+                className={`grid ${gridClass} gap-2 overflow-auto`}
+                style={gridRowStyle}
+              >
+                {allOrderedStreams.map((stream) => {
+                  const isOnline = stream.latestHealth === null || stream.latestHealth?.isOnline === true
+                  const levels = getLevels(stream.id)
+                  return (
+                    <MCRStreamTile
+                      key={stream.id}
+                      id={stream.id}
+                      name={stream.name}
+                      isOnline={isOnline}
+                      isMonitoring={isMonitoring && isOnline}
+                      leftLevel={levels.left}
+                      rightLevel={levels.right}
+                      isMuted={isMuted(stream.id)}
+                      onToggleMute={() => toggleMute(stream.id)}
+                      health={stream.latestHealth}
+                      isRecording={recordingStreams.has(stream.id)}
+                      onStartRecording={() => startRecording(stream.id)}
+                      onStopRecording={() => stopRecording(stream.id)}
+                      volume={getVolume(stream.id)}
+                      onVolumeChange={(vol) => setVolume(stream.id, vol)}
+                    />
+                  )
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </main>
+      </div>
+    )
+  }
+
   return (
-    <div className={`flex flex-col bg-gray-950 ${zenMode ? 'min-h-screen' : 'min-h-[calc(100vh-4rem)]'}`}>
-      {/* Zen mode exit button */}
-      {zenMode && (
-        <button
-          onClick={() => setZenMode(false)}
-          className="fixed right-4 top-4 z-50 rounded-lg border border-gray-700 bg-gray-900/90 p-2 text-gray-400 shadow-lg backdrop-blur-sm transition-all hover:border-gray-600 hover:bg-gray-800 hover:text-white"
-          title="Exit zen mode (Esc)"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-          </svg>
-        </button>
-      )}
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col bg-gray-950">
 
       {/* Control bar */}
-      {!zenMode && (
       <div className="flex items-center justify-between border-b border-gray-800 bg-black px-4 py-2">
         <div className="flex items-center gap-6">
           {/* Status indicators */}
@@ -748,10 +863,9 @@ export default function Monitor() {
           </button>
         </div>
       </div>
-      )}
 
       {/* Not monitoring warning */}
-      {!isMonitoring && streams.length > 0 && !zenMode && (
+      {!isMonitoring && streams.length > 0 && (
         <div className="border-b border-amber-900/50 bg-amber-950/50 px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -805,7 +919,6 @@ export default function Monitor() {
                     onStopRecording={() => stopRecording(stream.id)}
                     volume={getVolume(stream.id)}
                     onVolumeChange={(vol) => setVolume(stream.id, vol)}
-                    tileSize={tileSize}
                   />
                 )
               })}
@@ -814,19 +927,8 @@ export default function Monitor() {
         </DndContext>
       </main>
 
-      {/* Recordings panel */}
-      {!zenMode && (
-        <RecordingsPanel
-          recordings={recordings}
-          onClearAll={clearAllRecordings}
-          onDeleteRecording={deleteRecording}
-          isExpanded={recordingsPanelExpanded}
-          onToggleExpanded={() => setRecordingsPanelExpanded(!recordingsPanelExpanded)}
-        />
-      )}
 
       {/* Hippynet promo banner */}
-      {!zenMode && (
       <div className="border-t border-blue-900/30 bg-gradient-to-r from-[#0B1C8C]/20 via-[#1E6BFF]/10 to-[#0B1C8C]/20">
         <button
           onClick={togglePromo}
@@ -943,11 +1045,9 @@ export default function Monitor() {
           </div>
         )}
       </div>
-      )}
 
       {/* Footer */}
-      {!zenMode && (
-        <footer className="border-t border-gray-800 bg-black px-4 py-2">
+      <footer className="border-t border-gray-800 bg-black px-4 py-2">
           <div className="flex items-center justify-between text-xs text-gray-500">
             <div className="flex items-center gap-4">
               <span>StreamVU Monitor</span>
@@ -973,8 +1073,7 @@ export default function Monitor() {
               <span className="text-gray-600">Drag tiles to reorder</span>
             </div>
           </div>
-        </footer>
-      )}
+      </footer>
 
       {/* Clear confirmation modal */}
       {showClearConfirm && (
